@@ -1,0 +1,99 @@
+# ============================================================================
+# Real-Time Bidirectional Sign Language Translation System - Dependencies
+# ============================================================================
+
+# ---- VIDEO AND COMPUTER VISION ----
+opencv-python==4.8.1.78
+# OpenCV: Real-time video capture, frame processing, image manipulation, 
+# and computer vision operations for camera input handling
+
+mediapipe==0.10.0
+# MediaPipe: Pre-built hand pose estimation, gesture recognition, and 
+# pose detection for accurate sign language gesture capture
+
+# ---- GUI FRAMEWORK ----
+customtkinter==5.2.0
+# CustomTkinter: Modern, aesthetically pleasing GUI framework built on Tkinter,
+# provides native-looking widgets and themes for the desktop application
+
+# ---- SPEECH RECOGNITION AND TEXT-TO-SPEECH ----
+vosk==0.3.32
+# Vosk: Lightweight offline speech recognition engine for voice input,
+# enables bidirectional translation from speech to sign language
+
+pyttsx3==2.90
+# pyttsx3: Offline text-to-speech synthesis for accessible audio output,
+# converts translated text to spoken words without internet dependency
+
+# ---- IMAGE PROCESSING ----
+Pillow==10.0.0
+# Pillow: Image processing library for thumbnail generation, image resizing,
+# format conversion, and UI asset management
+
+# ---- CORE DEPENDENCIES ----
+numpy==1.24.3
+# NumPy: Numerical computing library for matrix operations, array manipulation,
+# essential for video frame processing and model operations
+
+# ---- DATA HANDLING ----
+pandas==2.0.3
+# Pandas: Data manipulation and analysis library for translation history,
+# logging, and structured data management
+
+# ---- DATABASE ----
+sqlalchemy==2.0.21
+# SQLAlchemy: SQL toolkit and ORM for database abstraction layer,
+# manages translation history, user sessions, and sign language dictionaries
+
+# ---- CONFIGURATION AND LOGGING ----
+python-dotenv==1.0.0
+# python-dotenv: Loads environment variables from .env file,
+# provides secure configuration management without hardcoding secrets
+
+PyYAML==6.0.1
+# PyYAML: YAML parser and emitter for configuration file handling,
+# reads application settings from config/settings.yaml
+
+# ---- HTTP AND API REQUESTS ----
+requests==2.31.0
+# Requests: HTTP library for API calls to cloud services,
+# used for model downloads and optional cloud-based features
+
+# ---- DEVELOPMENT AND TESTING ----
+pytest==7.4.2
+# Pytest: Testing framework for unit and integration tests,
+# simplifies test discovery, fixtures, and assertion introspection
+
+pytest-cov==4.1.0
+# Pytest-cov: Code coverage plugin for pytest,
+# measures test coverage and generates coverage reports
+
+pytest-mock==3.11.1
+# Pytest-mock: Fixture for easier mocking in tests,
+# provides mock, mocker, and spy functionality for unit testing
+
+# ---- CODE QUALITY ----
+black==23.9.1
+# Black: Code formatter for Python, ensures consistent code style,
+# enforces PEP 8 with opinionated formatting rules
+
+flake8==6.1.0
+# Flake8: Style guide enforcement tool, checks for PEP 8 compliance,
+# detects logical errors and code complexity issues
+
+pylint==2.17.5
+# Pylint: Code analysis tool for Python, catches bugs and design problems,
+# provides detailed feedback on code quality and maintainability
+
+mypy==1.5.1
+# Mypy: Static type checker for Python, validates type annotations,
+# catches type-related bugs before runtime
+
+# ---- UTILITIES ----
+tqdm==4.66.1
+# tqdm: Progress bar library for long-running operations,
+# provides visual feedback for model downloads, training, and processing
+
+Werkzeug==2.3.7
+# Werkzeug: WSGI utility library for handling HTTP requests and file uploads,
+# used for optional web interface components

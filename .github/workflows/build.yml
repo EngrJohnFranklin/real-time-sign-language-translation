@@ -1,0 +1,9 @@
+# CI/CD Pipeline - Build and Deployment
+# Builds application and prepares distribution packages
+
+name: Build
+on: [push, release]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Define build steps here

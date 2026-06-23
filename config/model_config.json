@@ -1,0 +1,12 @@
+{
+  "model_name": "sign_language_model_v1",
+  "model_type": "CNN",
+  "input_shape": [224, 224, 3],
+  "num_classes": 1000,
+  "confidence_threshold": 0.7,
+  "inference_backend": "tensorflow",
+  "model_url": "https://example.com/models/sign_language_model_v1.pb",
+  "checksum": "abc123def456",
+  "supported_languages": ["ASL", "BSL", "LSF"],
+  "max_memory_mb": 2048
+}

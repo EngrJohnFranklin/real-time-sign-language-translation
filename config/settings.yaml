@@ -1,0 +1,24 @@
+# Application Configuration Settings
+# Camera settings
+camera:
+  resolution: [640, 480]
+  fps: 30
+  device_id: 0
+
+# Model settings
+model:
+  name: "sign_language_model_v1"
+  confidence_threshold: 0.7
+  device: "gpu"  # or "cpu"
+
+# UI settings
+ui:
+  theme: "dark"
+  font_size: 12
+  display_fps: true
+
+# Translation settings
+translation:
+  source_language: "ASL"
+  target_language: "English"
+  enable_tts: true

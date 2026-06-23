@@ -1,0 +1,13 @@
+# Real-Time Bidirectional Sign Language Translation System
+# GitHub repository structure template
+# Add this to GITHUB_TOPICS in repository settings: sign-language, translation, computer-vision, accessibility
+
+## About This Repository
+This is the project repository structure template. All files and folders are organized for:
+- Clear separation of concerns
+- Easy testing and maintenance
+- Scalability for future features
+- Professional collaboration
+
+## Repository Structure Overview
+See `/docs/ARCHITECTURE.md` for detailed information about each component.
