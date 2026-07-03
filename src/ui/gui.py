@@ -462,6 +462,7 @@ class MainWindow(ctk.CTk):
         self.final_speech_lines = []
         self.last_auto_spoken_text = ""
         self.current_language = SpeechLanguage.ENGLISH
+        self.sign_clear_timer_id = None
         
         try:
             self._initialize_modules()
@@ -706,6 +707,14 @@ class MainWindow(ctk.CTk):
         try:
             logger.info("Shutting down application...")
             self._update_status("Shutting down...")
+
+            # Cancel any pending UI timer callbacks before teardown.
+            if self.sign_clear_timer_id is not None:
+                try:
+                    self.after_cancel(self.sign_clear_timer_id)
+                except Exception:
+                    pass
+                self.sign_clear_timer_id = None
             
             # Cleanup modules
             if self.camera_panel:
@@ -732,32 +741,61 @@ class MainWindow(ctk.CTk):
             hand_side: Which hand detected the sign (Left/Right).
         """
         try:
+            # This callback can be invoked from the camera thread.
+            self.after(0, lambda s=sign_name: self._handle_sign_recognized_ui(s))
+        except Exception as e:
+            logger.error(f"Error handling sign recognition: {e}")
+
+    def _handle_sign_recognized_ui(self, sign_name: str):
+        """Handle sign recognition updates on the UI thread only."""
+        try:
             if not self.sign_to_text_converter:
                 return
 
             appended_word = self.sign_to_text_converter.add_confirmed_prediction(sign_name)
             if appended_word:
                 self._append_sign_text(appended_word)
+                self._restart_sign_clear_timer()
                 self._speak_confirmed_sign_text(appended_word)
         except Exception as e:
-            logger.error(f"Error handling sign recognition: {e}")
+            logger.error(f"Error handling sign recognition in UI thread: {e}")
 
     def _append_sign_text(self, word: str):
-        """Append converted sign text to the existing output textbox."""
+        """Display only the latest recognized sign/phrase in the output textbox."""
         try:
             if self.sign_text_display.winfo_exists():
                 self.sign_text_display.configure(state="normal")
 
-                existing = self.sign_text_display.get("1.0", "end-1c").strip()
-                if existing:
-                    self.sign_text_display.insert("end", f" {word}")
-                else:
-                    self.sign_text_display.insert("end", word)
-
+                self.sign_text_display.delete("1.0", "end")
+                self.sign_text_display.insert("end", word)
                 self.sign_text_display.configure(state="disabled")
                 self.sign_text_display.see("end")
         except Exception as e:
             logger.error(f"Error updating sign display: {e}")
+
+    def _restart_sign_clear_timer(self):
+        """Reset the 3-second inactivity timer for Sign-to-Text display."""
+        try:
+            if self.sign_clear_timer_id is not None:
+                try:
+                    self.after_cancel(self.sign_clear_timer_id)
+                except Exception:
+                    pass
+
+            self.sign_clear_timer_id = self.after(3000, self._clear_sign_text_display)
+        except Exception as e:
+            logger.error(f"Error restarting sign clear timer: {e}")
+
+    def _clear_sign_text_display(self):
+        """Clear Sign-to-Text display after inactivity timeout."""
+        try:
+            self.sign_clear_timer_id = None
+            if self.sign_text_display and self.sign_text_display.winfo_exists():
+                self.sign_text_display.configure(state="normal")
+                self.sign_text_display.delete("1.0", "end")
+                self.sign_text_display.configure(state="disabled")
+        except Exception as e:
+            logger.error(f"Error clearing sign display: {e}")
 
     def _speak_confirmed_sign_text(self, text: str):
         """Speak newly confirmed sign text asynchronously without repeating it."""
