@@ -12,6 +12,7 @@ from typing import Optional, Tuple, List, Dict
 from enum import Enum
 import logging
 
+import cv2
 import mediapipe as mp
 import numpy as np
 

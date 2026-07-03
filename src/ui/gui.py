@@ -2,22 +2,21 @@
 Main GUI Application for Real-Time Sign Language Translation.
 
 This module provides the main user interface using CustomTkinter with a dark modern theme.
-Integrates sign detection, speech recognition, text-to-speech, and video playback modules.
+Integrates sign detection, speech recognition, and text-to-speech modules.
 
-Layout:
+Simplified Layout:
 - Left panel: Live webcam feed with hand landmarks
 - Right top: Recognized sign text
-- Right middle: Speech-to-text output
-- Right bottom: Sign language video demonstrations
-- Control buttons: Start Camera, Start Listening, Speak Text, Play Sign Video, Clear, Exit
+- Right bottom: Speech-to-text output
+- Control buttons: Start Camera, Speak
 """
 
 import os
 import sys
 import threading
 import logging
+from collections import deque
 from typing import Optional, Tuple
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -32,7 +31,8 @@ if src_dir not in sys.path:
 # Import application modules
 from models.sign_detector import SignRecognizer, SignType
 from translation.speech_handler import SpeechHandler, SpeechResult, SpeechLanguage
-from ui.video_player import VideoPlayer, VideoSign
+from translation.sign_to_text import SignToTextConverter
+from ui.video_player import VideoPlayerPanel
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,10 @@ class CameraPanel(ctk.CTkFrame):
     Handles camera initialization, frame capture, and hand landmark visualization.
     Runs camera capture in background thread to prevent UI blocking.
     """
+
+    CONFIDENCE_THRESHOLD = 0.75
+    STABILITY_FRAMES = 4
+    LABEL_HOLD_FRAMES = 6
     
     def __init__(self, parent, sign_recognizer: SignRecognizer, **kwargs):
         """
@@ -60,12 +64,19 @@ class CameraPanel(ctk.CTkFrame):
         self.camera = None
         self.is_running = False
         self.camera_thread = None
+        self.thread_lock = threading.Lock()  # Prevent thread race conditions
         self.current_frame = None
         self.frame_label = None
         self.status_label = None
         self.left_hand_result = None
         self.right_hand_result = None
         self.recognized_sign_callback = None
+        self.left_prediction_history = deque(maxlen=self.STABILITY_FRAMES)
+        self.right_prediction_history = deque(maxlen=self.STABILITY_FRAMES)
+        self.left_stable_result = None
+        self.right_stable_result = None
+        self.left_hold_counter = 0
+        self.right_hold_counter = 0
         
         try:
             self._create_ui()
@@ -123,8 +134,9 @@ class CameraPanel(ctk.CTkFrame):
             self.camera.set(cv2.CAP_PROP_FPS, 30)
             
             self.is_running = True
-            self.camera_thread = threading.Thread(target=self._camera_loop, daemon=True)
-            self.camera_thread.start()
+            with self.thread_lock:
+                self.camera_thread = threading.Thread(target=self._camera_loop, daemon=True)
+                self.camera_thread.start()
             
             self.status_label.configure(text="Status: Camera Running ✓")
             logger.info("Camera started successfully")
@@ -140,8 +152,9 @@ class CameraPanel(ctk.CTkFrame):
         try:
             self.is_running = False
             
-            if self.camera_thread and self.camera_thread.is_alive():
-                self.camera_thread.join(timeout=2.0)
+            with self.thread_lock:
+                if self.camera_thread and self.camera_thread.is_alive():
+                    self.camera_thread.join(timeout=2.0)
             
             if self.camera:
                 self.camera.release()
@@ -171,37 +184,55 @@ class CameraPanel(ctk.CTkFrame):
                     # Flip frame for mirror effect (selfie view)
                     frame = cv2.flip(frame, 1)
                     self.current_frame = frame
-                    
-                    # Process frame with sign recognizer
+
+                    # Every frame is sent to the existing SignRecognizer (MediaPipe-based).
                     left_result, right_result = self.sign_recognizer.process_frame(frame)
                     self.left_hand_result = left_result
                     self.right_hand_result = right_result
-                    
+
+                    left_display_result, left_is_new = self._update_temporal_state(left_result, "Left")
+                    right_display_result, right_is_new = self._update_temporal_state(right_result, "Right")
+
                     # Draw hand landmarks on frame
                     if left_result and left_result.landmarks:
                         self._draw_hand_landmarks(frame, left_result.landmarks, (0, 255, 0))
-                    
+
                     if right_result and right_result.landmarks:
                         self._draw_hand_landmarks(frame, right_result.landmarks, (0, 165, 255))
-                    
-                    # Draw recognized sign text
-                    if left_result and left_result.sign_type != SignType.UNKNOWN:
-                        cv2.putText(frame, f"L: {left_result.sign_type.value}",
-                                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                    
-                    if right_result and right_result.sign_type != SignType.UNKNOWN:
-                        cv2.putText(frame, f"R: {right_result.sign_type.value}",
-                                   (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 165, 255), 2)
-                    
-                    # Call recognized sign callback
+
+                    # Draw detected sign labels only when above confidence threshold.
+                    if left_display_result:
+                        cv2.putText(
+                            frame,
+                            f"L: {left_display_result.sign_type.value} ({left_display_result.confidence:.2f})",
+                            (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8,
+                            (0, 255, 0),
+                            2
+                        )
+
+                    if right_display_result:
+                        cv2.putText(
+                            frame,
+                            f"R: {right_display_result.sign_type.value} ({right_display_result.confidence:.2f})",
+                            (10, 70),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            0.8,
+                            (0, 165, 255),
+                            2
+                        )
+
+                    # Update recognized sign panel with threshold-filtered predictions.
                     if self.recognized_sign_callback:
-                        if left_result and left_result.sign_type != SignType.UNKNOWN:
-                            self.recognized_sign_callback(left_result.sign_type.value, "Left")
-                        if right_result and right_result.sign_type != SignType.UNKNOWN:
-                            self.recognized_sign_callback(right_result.sign_type.value, "Right")
+                        if left_display_result and left_is_new:
+                            self.recognized_sign_callback(left_display_result.sign_type.value, "Left")
+                        if right_display_result and right_is_new:
+                            self.recognized_sign_callback(right_display_result.sign_type.value, "Right")
                     
                     # Update display in main thread
-                    self._update_frame_display(frame)
+                    if frame is not None:
+                        self._update_frame_display(frame)
                 
                 except Exception as e:
                     logger.error(f"Error in camera loop: {e}")
@@ -251,6 +282,93 @@ class CameraPanel(ctk.CTkFrame):
         
         except Exception as e:
             logger.error(f"Error drawing landmarks: {e}")
+
+    def _should_display_result(self, result) -> bool:
+        """
+        Check whether a sign result should be shown to the user.
+
+        Args:
+            result: SignResult instance or None.
+
+        Returns:
+            True when prediction is not UNKNOWN and meets confidence threshold.
+        """
+        if not result:
+            return False
+        if result.sign_type == SignType.UNKNOWN:
+            return False
+        return result.confidence >= self.CONFIDENCE_THRESHOLD
+
+    def _update_temporal_state(self, result, hand_side: str):
+        """
+        Apply temporal smoothing per hand to reduce flickering predictions.
+        
+        Requires same prediction to appear in at least 3 out of 4 consecutive frames 
+        to reduce sensitivity to occasional detection noise while maintaining responsiveness.
+
+        Args:
+            result: Current frame SignResult or None.
+            hand_side: Left or Right hand identifier.
+
+        Returns:
+            Tuple of (result_to_display, is_newly_accepted).
+        """
+        if hand_side == "Left":
+            history = self.left_prediction_history
+            stable_result = self.left_stable_result
+            hold_counter = self.left_hold_counter
+        else:
+            history = self.right_prediction_history
+            stable_result = self.right_stable_result
+            hold_counter = self.right_hold_counter
+
+        is_valid_candidate = self._should_display_result(result)
+        current_label = result.sign_type.value if is_valid_candidate else None
+        history.append(current_label)
+
+        is_newly_accepted = False
+        
+        # Check if prediction is stable: same label appears in at least 3 out of 4 frames
+        if len(history) == self.STABILITY_FRAMES:
+            label_counts = {}
+            for label in history:
+                if label is not None:
+                    label_counts[label] = label_counts.get(label, 0) + 1
+            
+            # Find if any label appears at least 3 times
+            most_common_label = max(label_counts.items(), key=lambda x: x[1])[0] if label_counts else None
+            most_common_count = label_counts.get(most_common_label, 0) if most_common_label else 0
+            
+            if most_common_count >= 3 and most_common_label is not None:
+                # Prediction is stable (appears 3+ times in last 4 frames)
+                previous_label = stable_result.sign_type.value if stable_result else None
+                # Update stable result to current frame if it matches the stable prediction
+                if current_label == most_common_label:
+                    stable_result = result
+                hold_counter = self.LABEL_HOLD_FRAMES
+                is_newly_accepted = previous_label != most_common_label
+            else:
+                # Not stable enough, start hold-down phase
+                if hold_counter > 0:
+                    hold_counter -= 1
+                else:
+                    stable_result = None
+        elif stable_result and hold_counter > 0:
+            # Continue holding previous stable result
+            hold_counter -= 1
+        else:
+            # No stable result to hold
+            stable_result = None
+            hold_counter = 0
+
+        if hand_side == "Left":
+            self.left_stable_result = stable_result
+            self.left_hold_counter = hold_counter
+        else:
+            self.right_stable_result = stable_result
+            self.right_hold_counter = hold_counter
+
+        return stable_result, is_newly_accepted
     
     def _update_frame_display(self, frame: np.ndarray):
         """
@@ -259,7 +377,15 @@ class CameraPanel(ctk.CTkFrame):
         Args:
             frame: OpenCV frame to display.
         """
+        if frame is None:
+            logger.warning("Cannot display frame: frame is None")
+            return
+        
         try:
+            # Ensure frame has valid dimensions
+            if frame.size == 0:
+                logger.warning("Cannot display frame: empty frame data")
+                return
             # Resize frame to fit display
             h, w = frame.shape[:2]
             display_h = 400
@@ -322,7 +448,7 @@ class MainWindow(ctk.CTk):
         # Module instances
         self.sign_recognizer = None
         self.speech_handler = None
-        self.video_player = None
+        self.sign_to_text_converter = None
         
         # UI components
         self.camera_panel = None
@@ -331,12 +457,16 @@ class MainWindow(ctk.CTk):
         self.video_player_panel = None
         
         # State variables
-        self.current_recognized_signs = []
         self.current_speech_text = ""
+        self.current_partial_speech_text = ""
+        self.final_speech_lines = []
+        self.last_auto_spoken_text = ""
+        self.current_language = SpeechLanguage.ENGLISH
         
         try:
             self._initialize_modules()
             self._create_ui()
+            self._initialize_video_player()
             self._setup_callbacks()
             logger.info("MainWindow initialized successfully")
         except Exception as e:
@@ -349,26 +479,15 @@ class MainWindow(ctk.CTk):
             logger.info("Initializing sign recognizer...")
             self.sign_recognizer = SignRecognizer()
             
-            logger.info("Initializing speech handler...")
+            logger.info(f"Initializing speech handler for language: {self.current_language.value}...")
             self.speech_handler = SpeechHandler(
-                language=SpeechLanguage.ENGLISH,
+                language=self.current_language,
                 tts_rate=150,
                 tts_volume=0.8
             )
-            
-            logger.info("Initializing video player...")
-            # Try to find videos folder in various locations
-            video_folder = None
-            for possible_path in [
-                "videos",
-                os.path.join(os.path.dirname(__file__), "..", "..", "videos"),
-                os.path.join(os.path.dirname(__file__), "..", "videos")
-            ]:
-                if os.path.exists(possible_path):
-                    video_folder = possible_path
-                    break
-            
-            self.video_player = VideoPlayer(video_folder)
+
+            logger.info("Initializing sign-to-text converter...")
+            self.sign_to_text_converter = SignToTextConverter()
             
             logger.info("All modules initialized successfully")
         except Exception as e:
@@ -377,7 +496,7 @@ class MainWindow(ctk.CTk):
             raise
     
     def _create_ui(self):
-        """Create main UI layout."""
+        """Create simplified main UI layout."""
         try:
             # Main container
             main_container = ctk.CTkFrame(self)
@@ -390,46 +509,31 @@ class MainWindow(ctk.CTk):
             self.camera_panel = CameraPanel(left_panel, self.sign_recognizer)
             self.camera_panel.pack(fill="both", expand=True)
             
-            # Right panel - Information and controls
+            # Right panel - Text outputs only
             right_panel = ctk.CTkFrame(main_container)
             right_panel.pack(side="right", fill="both", expand=True, padx=5)
             
             # Top section - Recognized signs
             signs_frame = ctk.CTkFrame(right_panel, fg_color="gray25")
-            signs_frame.pack(fill="x", padx=5, pady=5)
+            signs_frame.pack(fill="both", expand=True, padx=5, pady=5)
             
             ctk.CTkLabel(signs_frame, text="🤖 Recognized Signs", font=("Arial", 14, "bold")).pack(pady=5)
             
-            self.sign_text_display = ctk.CTkTextbox(signs_frame, height=80, font=("Courier", 11))
+            self.sign_text_display = ctk.CTkTextbox(signs_frame, font=("Courier", 11))
             self.sign_text_display.pack(fill="both", expand=True, padx=5, pady=5)
             self.sign_text_display.configure(state="disabled")
             
-            # Middle section - Speech recognition
+            # Bottom section - Speech recognition
             speech_frame = ctk.CTkFrame(right_panel, fg_color="gray25")
-            speech_frame.pack(fill="x", padx=5, pady=5)
+            speech_frame.pack(fill="both", expand=True, padx=5, pady=5)
             
             ctk.CTkLabel(speech_frame, text="🎤 Speech-to-Text", font=("Arial", 14, "bold")).pack(pady=5)
             
-            self.speech_text_display = ctk.CTkTextbox(speech_frame, height=80, font=("Courier", 11))
+            self.speech_text_display = ctk.CTkTextbox(speech_frame, font=("Courier", 11))
             self.speech_text_display.pack(fill="both", expand=True, padx=5, pady=5)
             self.speech_text_display.configure(state="disabled")
             
-            # Bottom section - Video player
-            video_frame = ctk.CTkFrame(right_panel, fg_color="gray25")
-            video_frame.pack(fill="both", expand=True, padx=5, pady=5)
-            
-            ctk.CTkLabel(video_frame, text="🎬 Sign Language Videos", font=("Arial", 14, "bold")).pack(pady=5)
-            
-            # Import VideoPlayerPanel here to avoid circular imports
-            from ui.video_player import VideoPlayerPanel
-            
-            self.video_player_panel = VideoPlayerPanel(
-                video_frame,
-                video_folder=self.video_player.video_folder
-            )
-            self.video_player_panel.pack(fill="both", expand=True, padx=5, pady=5)
-            
-            # Control buttons section
+            # Control buttons section - Only 2 primary buttons
             button_frame = ctk.CTkFrame(self)
             button_frame.pack(fill="x", padx=5, pady=10)
             
@@ -438,57 +542,36 @@ class MainWindow(ctk.CTk):
                 button_frame,
                 text="▶ Start Camera",
                 command=self._on_camera_clicked,
-                width=120,
+                width=150,
                 height=40,
-                font=("Arial", 11, "bold")
+                font=("Arial", 12, "bold")
             )
             self.camera_button.pack(side="left", padx=5)
             
-            # Start Listening button
-            self.listen_button = ctk.CTkButton(
-                button_frame,
-                text="🎤 Listen",
-                command=self._on_listen_clicked,
-                width=120,
-                height=40,
-                font=("Arial", 11, "bold")
-            )
-            self.listen_button.pack(side="left", padx=5)
-            
-            # Speak Text button
+            # Speak button
             self.speak_button = ctk.CTkButton(
                 button_frame,
-                text="🔊 Speak",
+                text="🎤 Speak",
                 command=self._on_speak_clicked,
-                width=120,
+                width=150,
                 height=40,
-                font=("Arial", 11, "bold")
+                font=("Arial", 12, "bold")
             )
             self.speak_button.pack(side="left", padx=5)
             
-            # Clear button
-            self.clear_button = ctk.CTkButton(
+            # Language selector
+            ctk.CTkLabel(button_frame, text="Language:", font=("Arial", 10)).pack(side="left", padx=(10, 0))
+            self.language_selector = ctk.CTkComboBox(
                 button_frame,
-                text="🗑 Clear",
-                command=self._on_clear_clicked,
-                width=120,
+                values=["English", "Filipino"],
+                command=self._on_language_changed,
+                state="readonly",
+                width=100,
                 height=40,
-                font=("Arial", 11, "bold"),
-                fg_color="orange"
+                font=("Arial", 10)
             )
-            self.clear_button.pack(side="left", padx=5)
-            
-            # Exit button
-            self.exit_button = ctk.CTkButton(
-                button_frame,
-                text="❌ Exit",
-                command=self._on_exit_clicked,
-                width=120,
-                height=40,
-                font=("Arial", 11, "bold"),
-                fg_color="red"
-            )
-            self.exit_button.pack(side="left", padx=5)
+            self.language_selector.set("English")
+            self.language_selector.pack(side="left", padx=5)
             
             # Status bar
             self.status_bar = ctk.CTkLabel(
@@ -504,14 +587,43 @@ class MainWindow(ctk.CTk):
             logger.error(f"Error creating UI: {e}")
             raise
     
+    def _initialize_video_player(self):
+        """Initialize video player for speech-to-sign conversion (no UI display)."""
+        try:
+            logger.info("Initializing video player for sign language conversion...")
+            # Create a hidden container for VideoPlayerPanel
+            hidden_container = ctk.CTkFrame(self)
+            # Don't pack it - we only need the VideoPlayerPanel for its conversion logic
+            
+            # Find video folder
+            video_folder = None
+            for possible_path in [
+                "videos",
+                os.path.join(os.path.dirname(__file__), "..", "..", "videos"),
+                os.path.join(os.path.dirname(__file__), "..", "videos")
+            ]:
+                if os.path.exists(possible_path):
+                    video_folder = possible_path
+                    logger.info(f"Found videos folder: {video_folder}")
+                    break
+            
+            if video_folder:
+                self.video_player_panel = VideoPlayerPanel(hidden_container, video_folder=video_folder)
+                logger.info("Video player initialized successfully")
+            else:
+                logger.warning("No videos folder found - speech-to-sign conversion will be unavailable")
+        except Exception as e:
+            logger.warning(f"Could not initialize video player: {e}")
+            # Don't raise - video player is optional
+    
     def _setup_callbacks(self):
         """Setup callbacks for modules."""
         try:
             # Camera callback
             self.camera_panel.set_recognized_sign_callback(self._on_sign_recognized)
             
-            # Protocol for window close
-            self.protocol("WM_DELETE_WINDOW", self._on_exit_clicked)
+            # Protocol for window close - use default close behavior
+            self.protocol("WM_DELETE_WINDOW", self._on_window_close)
         
         except Exception as e:
             logger.error(f"Error setting up callbacks: {e}")
@@ -533,67 +645,64 @@ class MainWindow(ctk.CTk):
             logger.error(f"Error toggling camera: {e}")
             self._update_status(f"Error: {str(e)[:40]}")
     
-    def _on_listen_clicked(self):
-        """Handle Start Listening button click."""
+    def _on_speak_clicked(self):
+        """Handle Speak button click for microphone listening."""
         try:
             def on_speech_result(result: SpeechResult):
-                self._update_speech_text(result.text, result.is_final)
-            
+                self.after(0, lambda r=result: self._update_speech_text(r.text, r.is_final))
+
             if hasattr(self, '_listening') and self._listening:
                 self.speech_handler.stop_listening()
-                self.listen_button.configure(text="🎤 Listen")
+                self.speak_button.configure(text="🎤 Speak")
                 self._listening = False
                 self._update_status("Speech recognition stopped")
             else:
                 self.speech_handler.listen_and_recognize(callback=on_speech_result)
-                self.listen_button.configure(text="⏹ Stop Listening")
+                self.speak_button.configure(text="⏹ Stop Speaking")
                 self._listening = True
                 self._update_status("Listening for speech...")
         except Exception as e:
-            logger.error(f"Error toggling listening: {e}")
+            logger.error(f"Error toggling speak listening: {e}")
             self._update_status(f"Speech Error: {str(e)[:40]}")
     
-    def _on_speak_clicked(self):
-        """Handle Speak Text button click."""
+    def _on_language_changed(self, language_name: str):
+        """
+        Handle language selection change.
+        
+        Args:
+            language_name: Selected language name ("English" or "Filipino").
+        """
         try:
-            if self.speech_text_display.winfo_exists():
-                self.speech_text_display.configure(state="normal")
-                text = self.speech_text_display.get("1.0", "end-1c")
-                self.speech_text_display.configure(state="disabled")
-                
-                if text.strip():
-                    self._update_status("Speaking...")
-                    self.speech_handler.speak_async(text)
-                    self._update_status("Finished speaking")
-                else:
-                    self._update_status("No text to speak")
-        except Exception as e:
-            logger.error(f"Error speaking text: {e}")
-            self._update_status(f"TTS Error: {str(e)[:40]}")
-    
-    def _on_clear_clicked(self):
-        """Handle Clear button click."""
-        try:
-            # Clear sign text
-            if self.sign_text_display.winfo_exists():
-                self.sign_text_display.configure(state="normal")
-                self.sign_text_display.delete("1.0", "end")
-                self.sign_text_display.configure(state="disabled")
+            # Stop listening if currently active
+            if hasattr(self, '_listening') and self._listening:
+                self.speech_handler.stop_listening()
+                self.speak_button.configure(text="🎤 Speak")
+                self._listening = False
             
-            # Clear speech text
-            if self.speech_text_display.winfo_exists():
-                self.speech_text_display.configure(state="normal")
-                self.speech_text_display.delete("1.0", "end")
-                self.speech_text_display.configure(state="disabled")
+            # Map language name to enum
+            if language_name == "Filipino":
+                self.current_language = SpeechLanguage.FILIPINO
+            else:
+                self.current_language = SpeechLanguage.ENGLISH
             
-            self.current_recognized_signs = []
-            self.current_speech_text = ""
-            self._update_status("Cleared all text")
+            # Reinitialize speech handler with new language
+            logger.info(f"Switching to {language_name} speech recognition...")
+            if self.speech_handler:
+                self.speech_handler.cleanup()
+            
+            self.speech_handler = SpeechHandler(
+                language=self.current_language,
+                tts_rate=150,
+                tts_volume=0.8
+            )
+            
+            self._update_status(f"Language changed to {language_name}")
         except Exception as e:
-            logger.error(f"Error clearing text: {e}")
+            logger.error(f"Error changing language: {e}")
+            self._update_status(f"Language Error: {str(e)[:40]}")
     
-    def _on_exit_clicked(self):
-        """Handle Exit button click."""
+    def _on_window_close(self):
+        """Handle window close event."""
         try:
             logger.info("Shutting down application...")
             self._update_status("Shutting down...")
@@ -604,9 +713,6 @@ class MainWindow(ctk.CTk):
             
             if self.speech_handler:
                 self.speech_handler.cleanup()
-            
-            if self.video_player:
-                self.video_player.cleanup()
             
             if self.video_player_panel:
                 self.video_player_panel.cleanup()
@@ -626,33 +732,50 @@ class MainWindow(ctk.CTk):
             hand_side: Which hand detected the sign (Left/Right).
         """
         try:
-            # Add to sign list
-            sign_entry = f"{hand_side}: {sign_name}"
-            if sign_entry not in self.current_recognized_signs:
-                self.current_recognized_signs.append(sign_entry)
-                
-                # Keep only last 10 signs
-                if len(self.current_recognized_signs) > 10:
-                    self.current_recognized_signs.pop(0)
-                
-                # Update display
-                self._update_sign_display()
+            if not self.sign_to_text_converter:
+                return
+
+            appended_word = self.sign_to_text_converter.add_confirmed_prediction(sign_name)
+            if appended_word:
+                self._append_sign_text(appended_word)
+                self._speak_confirmed_sign_text(appended_word)
         except Exception as e:
             logger.error(f"Error handling sign recognition: {e}")
-    
-    def _update_sign_display(self):
-        """Update the sign text display."""
+
+    def _append_sign_text(self, word: str):
+        """Append converted sign text to the existing output textbox."""
         try:
             if self.sign_text_display.winfo_exists():
                 self.sign_text_display.configure(state="normal")
-                self.sign_text_display.delete("1.0", "end")
-                
-                for sign in self.current_recognized_signs:
-                    self.sign_text_display.insert("end", f"• {sign}\n")
-                
+
+                existing = self.sign_text_display.get("1.0", "end-1c").strip()
+                if existing:
+                    self.sign_text_display.insert("end", f" {word}")
+                else:
+                    self.sign_text_display.insert("end", word)
+
                 self.sign_text_display.configure(state="disabled")
+                self.sign_text_display.see("end")
         except Exception as e:
             logger.error(f"Error updating sign display: {e}")
+
+    def _speak_confirmed_sign_text(self, text: str):
+        """Speak newly confirmed sign text asynchronously without repeating it."""
+        try:
+            if not text or not self.speech_handler:
+                return
+
+            normalized = " ".join(text.strip().split())
+            if not normalized:
+                return
+
+            if normalized.lower() == self.last_auto_spoken_text.lower():
+                return
+
+            self.speech_handler.speak_async(normalized)
+            self.last_auto_spoken_text = normalized
+        except Exception as e:
+            logger.error(f"Error auto-speaking confirmed sign text: {e}")
     
     def _update_speech_text(self, text: str, is_final: bool):
         """
@@ -664,28 +787,52 @@ class MainWindow(ctk.CTk):
         """
         try:
             if self.speech_text_display.winfo_exists():
-                self.speech_text_display.configure(state="normal")
-                
+                cleaned = " ".join(text.strip().split())
+                if not cleaned:
+                    return
+
                 if is_final:
-                    # Append final result with newline
-                    self.speech_text_display.insert("end", f"{text}\n")
-                    self.current_speech_text = text
+                    if not self.final_speech_lines or self.final_speech_lines[-1].lower() != cleaned.lower():
+                        self.final_speech_lines.append(cleaned)
+                        self.current_speech_text = cleaned
+                        # Play recognized speech as sign language animations
+                        self._play_speech_text_as_signs(cleaned)
+                    self.current_partial_speech_text = ""
                 else:
-                    # Update last line with partial result
-                    content = self.speech_text_display.get("1.0", "end")
-                    lines = content.split('\n')
-                    if lines and not lines[-1].endswith('\n'):
-                        # Replace partial result
-                        self.speech_text_display.delete("1.0", "end")
-                        self.speech_text_display.insert("end", '\n'.join(lines[:-1]))
-                        if lines[:-1]:
-                            self.speech_text_display.insert("end", "\n")
-                        self.speech_text_display.insert("end", f"{text}")
-                
+                    self.current_partial_speech_text = cleaned
+
+                lines = list(self.final_speech_lines)
+                if self.current_partial_speech_text:
+                    lines.append(f"... {self.current_partial_speech_text}")
+
+                self.speech_text_display.configure(state="normal")
+                self.speech_text_display.delete("1.0", "end")
+                self.speech_text_display.insert("end", "\n".join(lines))
                 self.speech_text_display.configure(state="disabled")
                 self.speech_text_display.see("end")
         except Exception as e:
             logger.error(f"Error updating speech display: {e}")
+    
+    def _play_speech_text_as_signs(self, text: str):
+        """
+        Convert recognized speech text to sign language animations and queue for playback.
+        
+        Workflow:
+        - Speech text → Words
+        - For each word: If word video exists, play it. Else split into letters and play alphabet videos.
+        
+        Args:
+            text: Recognized speech text to convert to signs.
+        """
+        try:
+            if not text or not self.video_player_panel:
+                return
+            
+            # Queue the text for playback
+            self.video_player_panel.play_text_as_signs(text)
+            self._update_status(f"Playing sign animations for: {text[:40]}...")
+        except Exception as e:
+            logger.error(f"Error converting speech to signs: {e}")
     
     def _update_status(self, message: str):
         """

@@ -8,11 +8,13 @@ Supports playback controls (play, pause, stop, seek) and displays videos in a pa
 
 import os
 import threading
+import time
 import logging
+import re
+import queue
 from typing import Optional, Callable, Dict, List
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path
 
 import cv2
 import customtkinter as ctk
@@ -214,29 +216,48 @@ class VideoPlayer:
                 return False
             
             video_path = os.path.join(self.video_folder, video_filename)
-            
+            return self.load_video_file(video_path)
+        
+        except Exception as e:
+            logger.error(f"Error loading video: {e}")
+            return False
+
+    def load_video_file(self, video_path: str) -> bool:
+        """
+        Load a video file by absolute path.
+
+        Args:
+            video_path: Absolute or relative path to a video file.
+
+        Returns:
+            True if video loaded successfully, False otherwise.
+        """
+        try:
+            # Stop current playback
+            self.stop()
+
             if not os.path.exists(video_path):
                 logger.error(f"Video file not found: {video_path}")
                 return False
-            
+
             # Open video file
             self.video_capture = cv2.VideoCapture(video_path)
-            
+
             if not self.video_capture.isOpened():
                 logger.error(f"Cannot open video file: {video_path}")
                 return False
-            
+
             # Get video properties
             self.video_info = self._get_video_info(video_path)
             self.current_video_path = video_path
             self.current_frame_index = 0
             self.playback_state = PlaybackState.STOPPED
-            
+
             logger.info(f"Video loaded: {self.video_info}")
             return True
-        
+
         except Exception as e:
-            logger.error(f"Error loading video: {e}")
+            logger.error(f"Error loading video file: {e}")
             return False
     
     def _get_video_info(self, video_path: str) -> VideoInfo:
@@ -351,7 +372,7 @@ class VideoPlayer:
                     # Control playback speed using frame rate
                     if self.video_info and self.video_info.fps > 0:
                         frame_delay = int(1000 / self.video_info.fps)
-                        threading.Event().wait(frame_delay / 1000.0)
+                        time.sleep(frame_delay / 1000.0)
                 
                 except Exception as e:
                     logger.error(f"Error in playback loop: {e}")
@@ -586,14 +607,203 @@ class VideoPlayerPanel(ctk.CTkFrame):
         self.video_label = None
         self.info_label = None
         self.progress_var = None
+        self.video_index = {}
+        self.playback_queue = queue.Queue()
+        self.queue_worker_thread = None
+        self.queue_worker_running = False
+        self.queue_lock = threading.Lock()
+        self.queue_stop_event = threading.Event()
         
         try:
             self.video_player = VideoPlayer(video_folder)
             self._create_ui()
+            self._build_video_index()
             logger.info("VideoPlayerPanel initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing VideoPlayerPanel: {e}")
             raise
+
+    def _build_video_index(self):
+        """Build a filename index for word and alphabet clip lookup."""
+        try:
+            self.video_index = {}
+            if not self.video_player or not os.path.isdir(self.video_player.video_folder):
+                return
+
+            for filename in os.listdir(self.video_player.video_folder):
+                lower = filename.lower()
+                if not lower.endswith((".mp4", ".avi", ".mov", ".mkv")):
+                    continue
+                stem = os.path.splitext(lower)[0]
+                full_path = os.path.join(self.video_player.video_folder, filename)
+
+                keys = {
+                    stem,
+                    stem.replace("_", " "),
+                    stem.replace("-", " "),
+                    stem.replace(" ", "")
+                }
+
+                for key in keys:
+                    normalized = self._normalize_token(key)
+                    if normalized and normalized not in self.video_index:
+                        self.video_index[normalized] = full_path
+        except Exception as e:
+            logger.error(f"Error building video index: {e}")
+
+    @staticmethod
+    def _normalize_token(value: str) -> str:
+        """Normalize a word or clip key for matching."""
+        return re.sub(r"[^a-z0-9]", "", value.lower())
+
+    def _resolve_word_or_letter_clip(self, token: str) -> Optional[str]:
+        """Resolve token to a whole-word clip, with alphabet fallback for a single letter."""
+        normalized = self._normalize_token(token)
+        if not normalized:
+            return None
+
+        # Whole-word lookup first.
+        if normalized in self.video_index:
+            return self.video_index[normalized]
+
+        # Single-letter fallback naming variants.
+        if len(normalized) == 1:
+            for alias in (normalized, f"letter{normalized}", f"alphabet{normalized}", f"asl{normalized}"):
+                if alias in self.video_index:
+                    return self.video_index[alias]
+
+        return None
+
+    def _build_sequence_for_text(self, text: str) -> List[str]:
+        """
+        Build playback list from input text.
+
+        Workflow:
+        1) Split text into words.
+        2) If whole-word animation exists, use it.
+        3) Otherwise split into characters and use alphabet clips.
+        """
+        sequence = []
+        words = re.findall(r"[A-Za-z0-9']+", text or "")
+
+        for word in words:
+            whole_word_clip = self._resolve_word_or_letter_clip(word)
+            if whole_word_clip:
+                sequence.append(whole_word_clip)
+                continue
+
+            for char in word.lower():
+                if not char.isalnum():
+                    continue
+                char_clip = self._resolve_word_or_letter_clip(char)
+                if char_clip:
+                    sequence.append(char_clip)
+
+        return sequence
+
+    def play_text_as_signs(self, text: str) -> bool:
+        """
+        Convert text to sign clips and play them sequentially.
+
+        Returns:
+            True when playback sequence starts, False otherwise.
+        """
+        try:
+            self._build_video_index()
+            sequence = self._build_sequence_for_text(text)
+
+            if not sequence:
+                self.info_label.configure(text="No matching sign videos found for input text")
+                return False
+
+            self.enqueue_clips(sequence)
+            return True
+        except Exception as e:
+            logger.error(f"Error starting text-to-sign playback: {e}")
+            return False
+
+    def enqueue_clips(self, clip_paths: List[str]):
+        """Enqueue clip paths for sequential playback."""
+        try:
+            added = 0
+            for clip_path in clip_paths:
+                if clip_path:
+                    self.playback_queue.put(clip_path)
+                    added += 1
+
+            if added == 0:
+                return
+
+            self.after(0, lambda a=added: self.info_label.configure(text=f"Queued {a} animation(s)"))
+            self._start_queue_worker()
+        except Exception as e:
+            logger.error(f"Error enqueueing clips: {e}")
+
+    def _start_queue_worker(self):
+        """Start queue worker thread if not already running."""
+        with self.queue_lock:
+            if self.queue_worker_running:
+                return
+
+            self.queue_worker_running = True
+            self.queue_stop_event.clear()
+            self.queue_worker_thread = threading.Thread(target=self._queue_worker_loop, daemon=True)
+            self.queue_worker_thread.start()
+
+    def _queue_worker_loop(self):
+        """Consume playback queue and play clips strictly one-at-a-time."""
+        try:
+            while not self.queue_stop_event.is_set():
+                try:
+                    clip_path = self.playback_queue.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+
+                try:
+                    remaining = self.playback_queue.qsize()
+                    self.after(
+                        0,
+                        lambda p=os.path.basename(clip_path), r=remaining: self.info_label.configure(
+                            text=f"Playing: {p} ({r} queued)"
+                        )
+                    )
+
+                    if not self.video_player.load_video_file(clip_path):
+                        logger.warning(f"Skipping clip that failed to load: {clip_path}")
+                        continue
+
+                    if not self.video_player.play():
+                        logger.warning(f"Skipping clip that failed to play: {clip_path}")
+                        continue
+
+                    # Wait until current video has fully finished before next item.
+                    while (
+                        not self.queue_stop_event.is_set()
+                        and self.video_player.playback_state != PlaybackState.STOPPED
+                    ):
+                        time.sleep(0.05)
+
+                finally:
+                    self.playback_queue.task_done()
+
+            self.after(0, lambda: self.info_label.configure(text="Playback queue stopped"))
+        except Exception as e:
+            logger.error(f"Error in playback queue worker: {e}")
+        finally:
+            with self.queue_lock:
+                self.queue_worker_running = False
+
+    def clear_playback_queue(self):
+        """Remove all pending animations from the playback queue."""
+        try:
+            while True:
+                try:
+                    self.playback_queue.get_nowait()
+                    self.playback_queue.task_done()
+                except queue.Empty:
+                    break
+        except Exception as e:
+            logger.error(f"Error clearing playback queue: {e}")
     
     def _create_ui(self):
         """Create UI elements for the video player panel."""
@@ -705,8 +915,10 @@ class VideoPlayerPanel(ctk.CTkFrame):
         """Handle stop button click."""
         try:
             self.video_player.stop()
+            self.clear_playback_queue()
             self.progress_var.set(0)
             self._update_time_label()
+            self.info_label.configure(text="Playback stopped and queue cleared")
         except Exception as e:
             logger.error(f"Error stopping video: {e}")
     
@@ -782,6 +994,12 @@ class VideoPlayerPanel(ctk.CTkFrame):
     def cleanup(self):
         """Clean up resources."""
         try:
+            self.queue_stop_event.set()
+            self.clear_playback_queue()
+
+            if self.queue_worker_thread and self.queue_worker_thread.is_alive():
+                self.queue_worker_thread.join(timeout=1.0)
+
             if self.video_player:
                 self.video_player.cleanup()
         except Exception as e:

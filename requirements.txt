@@ -35,16 +35,6 @@ numpy==1.24.3
 # NumPy: Numerical computing library for matrix operations, array manipulation,
 # essential for video frame processing and model operations
 
-# ---- DATA HANDLING ----
-pandas==2.0.3
-# Pandas: Data manipulation and analysis library for translation history,
-# logging, and structured data management
-
-# ---- DATABASE ----
-sqlalchemy==2.0.21
-# SQLAlchemy: SQL toolkit and ORM for database abstraction layer,
-# manages translation history, user sessions, and sign language dictionaries
-
 # ---- CONFIGURATION AND LOGGING ----
 python-dotenv==1.0.0
 # python-dotenv: Loads environment variables from .env file,
@@ -53,11 +43,6 @@ python-dotenv==1.0.0
 PyYAML==6.0.1
 # PyYAML: YAML parser and emitter for configuration file handling,
 # reads application settings from config/settings.yaml
-
-# ---- HTTP AND API REQUESTS ----
-requests==2.31.0
-# Requests: HTTP library for API calls to cloud services,
-# used for model downloads and optional cloud-based features
 
 # ---- DEVELOPMENT AND TESTING ----
 pytest==7.4.2
@@ -93,7 +78,3 @@ mypy==1.5.1
 tqdm==4.66.1
 # tqdm: Progress bar library for long-running operations,
 # provides visual feedback for model downloads, training, and processing
-
-Werkzeug==2.3.7
-# Werkzeug: WSGI utility library for handling HTTP requests and file uploads,
-# used for optional web interface components

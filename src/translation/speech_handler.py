@@ -7,8 +7,10 @@ with no internet dependency.
 """
 
 import json
+import os
 import logging
 import threading
+import time
 from typing import Optional, Callable, List
 from dataclasses import dataclass
 from enum import Enum
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 class SpeechLanguage(Enum):
     """Supported languages for speech recognition."""
     ENGLISH = "en"
+    FILIPINO = "fil"
     SPANISH = "es"
     FRENCH = "fr"
     GERMAN = "de"
@@ -56,6 +59,8 @@ class VoskSpeechRecognizer:
     SAMPLE_RATE = 16000
     CHUNK_SIZE = 4096
     CHANNELS = 1
+    MIN_PARTIAL_CHARS = 2
+    MIN_FINAL_CHARS = 2
     
     def __init__(self, model_path: Optional[str] = None, language: SpeechLanguage = SpeechLanguage.ENGLISH):
         """
@@ -78,6 +83,8 @@ class VoskSpeechRecognizer:
         self.recognition_thread = None
         self.audio_queue = queue.Queue()
         self.result_callback = None
+        self._last_partial_text = ""
+        self._last_final_text = ""
         
         try:
             self._initialize_model()
@@ -103,20 +110,60 @@ class VoskSpeechRecognizer:
                 # Try to use provided model path
                 self.model = vosk.Model(self.model_path)
             else:
-                # Use default model (requires VOSK_MODEL_PATH environment variable)
-                # For development, provide explicit path or set environment variable
-                logger.warning("No model path provided. Attempting to load default model.")
-                try:
-                    self.model = vosk.Model("model")
-                except Exception:
-                    logger.warning("Default model not found. Using small model if available.")
-                    self.model = vosk.Model("model-en-us")
+                # Select model candidates by language with fallback to default English models.
+                model_candidates = self._get_model_candidates_for_language(self.language)
+                model_found = False
+
+                for candidate in model_candidates:
+                    if os.path.exists(candidate):
+                        logger.info(f"Loading Vosk model from: {candidate}")
+                        self.model = vosk.Model(candidate)
+                        model_found = True
+                        break
+
+                if not model_found:
+                    raise RuntimeError(
+                        f"No Vosk model found for language '{self.language.value}'. "
+                        f"Tried: {', '.join(model_candidates)}"
+                    )
             
             self.recognizer = vosk.KaldiRecognizer(self.model, self.SAMPLE_RATE)
             logger.debug("Vosk model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading Vosk model: {e}")
             raise RuntimeError(f"Could not load Vosk model. {str(e)}")
+
+    @staticmethod
+    def _get_model_candidates_for_language(language: SpeechLanguage) -> List[str]:
+        """
+        Get language-specific Vosk model candidate paths.
+
+        Args:
+            language: Selected speech language.
+
+        Returns:
+            Ordered candidate model directories.
+        """
+        english_candidates = [
+            "model-en-us",
+            "model-en",
+            "model",
+            "models/vosk/model-en-us",
+            "models/vosk/model"
+        ]
+
+        filipino_candidates = [
+            "model-fil",
+            "model-tl",
+            "model-ph",
+            "models/vosk/model-fil",
+            "models/vosk/model-tl"
+        ]
+
+        if language == SpeechLanguage.FILIPINO:
+            return filipino_candidates + english_candidates
+
+        return english_candidates
     
     def _initialize_audio(self):
         """
@@ -220,6 +267,10 @@ class VoskSpeechRecognizer:
                         result = self._parse_recognition_result(result_json, is_final=True)
                         
                         if result and self.result_callback:
+                            if result.text.lower() == self._last_final_text.lower():
+                                continue
+                            self._last_final_text = result.text
+                            self._last_partial_text = ""
                             self.result_callback(result)
                     else:
                         # Partial result
@@ -227,6 +278,9 @@ class VoskSpeechRecognizer:
                         result = self._parse_recognition_result(partial_json, is_final=False)
                         
                         if result and self.result_callback:
+                            if result.text.lower() == self._last_partial_text.lower():
+                                continue
+                            self._last_partial_text = result.text
                             self.result_callback(result)
                 
                 except Exception as e:
@@ -256,33 +310,37 @@ class VoskSpeechRecognizer:
             
             result_dict = json.loads(result_json)
             
-            # Handle final result format
-            if is_final and 'result' in result_dict:
-                text = ' '.join([item['conf'] for item in result_dict.get('result', [])])
-                confidence = 1.0
-                
-                # Try to get better text representation
-                if result_dict.get('result'):
-                    text = ' '.join([item.get('conf', '') for item in result_dict.get('result', [])])
+            # Final result format typically contains text + optional word-level confidence list.
+            if is_final and 'text' in result_dict:
+                text = result_dict.get('text', '')
+                word_items = result_dict.get('result', []) or []
+                confidence_values = [item.get('conf', 1.0) for item in word_items if isinstance(item.get('conf', 1.0), (int, float))]
+                confidence = sum(confidence_values) / len(confidence_values) if confidence_values else 1.0
             
             # Handle partial result format
             elif 'partial' in result_dict:
                 text = result_dict['partial']
                 confidence = 0.5  # Partial results have lower confidence
             
-            # Handle result format
-            elif 'result' in result_dict and result_dict['result']:
-                text = ' '.join([item.get('conf', '') for item in result_dict['result']])
+            # Handle fallback result text key
+            elif 'text' in result_dict:
+                text = result_dict.get('text', '')
                 confidence = 1.0
             
             else:
                 return None
             
-            if not text or text.strip() == '':
+            text = text.strip()
+            if not text:
+                return None
+
+            # Ignore silence/noise-like ultra-short outputs.
+            min_chars = self.MIN_FINAL_CHARS if is_final else self.MIN_PARTIAL_CHARS
+            if len(text) < min_chars:
                 return None
             
             return SpeechResult(
-                text=text.strip(),
+                text=text,
                 confidence=confidence,
                 is_final=is_final,
                 language=self.language.value
@@ -306,6 +364,7 @@ class VoskSpeechRecognizer:
             Recognized text string, or None if timeout or error occurs.
         """
         try:
+            final_text_event = threading.Event()
             final_text = None
             
             # Capture final results in callback
@@ -313,20 +372,19 @@ class VoskSpeechRecognizer:
                 nonlocal final_text
                 if result.is_final:
                     final_text = result.text
+                    final_text_event.set()
             
             old_callback = self.result_callback
             self.result_callback = capture_final
             
-            # Wait for final result (simple implementation)
-            # In production, use threading.Event for proper synchronization
-            import time
-            start = time.time()
+            # Wait for final result using threading.Event (efficient synchronization)
+            # This is more efficient than polling with time.sleep()
+            final_text_event.wait(timeout=timeout)
             
-            while final_text is None:
-                if timeout and (time.time() - start) > timeout:
-                    logger.warning("Speech recognition timeout")
-                    break
-                time.sleep(0.1)
+            if final_text_event.is_set():
+                logger.debug(f"Recognition result: '{final_text}'")
+            else:
+                logger.warning(f"Speech recognition timeout after {timeout}s")
             
             self.result_callback = old_callback
             return final_text
