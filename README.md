@@ -17,9 +17,11 @@ A comprehensive desktop application for real-time bidirectional sign language tr
 - **OS**: Windows 10 or later
 - **Python**: 3.8 or higher
 - **RAM**: 4GB minimum (8GB recommended)
-- **Webcam**: Required for real-time hand detection
+- **CPU**: 4 logical cores recommended for smoother real-time performance
+- **Webcam**: Required for sign recognition from live camera
 - **Microphone**: Required for speech recognition
-- **Disk Space**: 2GB (includes Vosk model)
+- **Audio Output**: Speaker/headphones for text-to-speech feedback
+- **Disk Space**: 2GB+ (includes Vosk model and optional sign videos)
 
 ## Installation Guide (Windows)
 
@@ -199,37 +201,32 @@ On first launch, the application will:
 ### Main Window Layout
 
 ```
-┌─────────────────────┬──────────────────────────┐
-│                     │ 🤖 Recognized Signs      │
-│   📷 Live Camera    │                          │
-│   Feed              ├──────────────────────────┤
-│   (with landmarks)  │ 🎤 Speech-to-Text        │
-│                     │                          │
-│                     ├──────────────────────────┤
-│                     │ 🎬 Sign Language Videos  │
-│                     │                          │
-└─────────────────────┴──────────────────────────┘
-        Control Buttons
++------------------------------------------------------+
+| Live Camera            | Sign Language Avatar        |
+| (expandable)           | (expandable)                |
++------------------------+-----------------------------+
+| Current Translation    | Speech Status               |
+| latest recognized text | Ready / Listening /         |
+|                        | Processing / Speaking       |
++------------------------+-----------------------------+
+| Start Camera           | Speak                       |
++------------------------------------------------------+
 ```
 
 ### Control Buttons
 
 | Button | Function |
 |--------|----------|
-| **▶ Start Camera** | Toggle webcam feed and hand detection |
-| **🎤 Listen** | Start/stop speech recognition |
-| **🔊 Speak** | Speak the text in the speech display |
-| **🗑 Clear** | Clear all text displays |
-| **❌ Exit** | Close the application |
+| **▶ Start Camera / ⏹ Stop Camera** | Toggle webcam feed and hand detection |
+| **🎤 Speak / ⏹ Stop** | Start/stop speech recognition |
 
 ### Workflow Example
 
-1. **Click "▶ Start Camera"** - Webcam starts, hand landmarks display
-2. **Make a sign** - Recognition appears in the "Recognized Signs" panel
-3. **Click "🎤 Listen"** - Microphone activates
-4. **Speak into microphone** - Text appears in "Speech-to-Text" panel
-5. **Click "🔊 Speak"** - Application speaks the recognized text
-6. **Select video** - Choose a sign from dropdown to see demonstration
+1. **Click "▶ Start Camera"** - Webcam starts and hand landmarks appear.
+2. **Make a supported sign** - Latest recognized result appears in Current Translation and can be spoken via TTS.
+3. **Click "🎤 Speak"** - Microphone activates and Speech Status changes to Listening.
+4. **Speak into microphone** - Final recognized text updates Current Translation.
+5. **Automatic sign playback** - Recognized speech is converted to sign animation in the Avatar panel.
 
 ## Project Folder Structure
 

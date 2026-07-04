@@ -224,9 +224,15 @@ class CameraPanel(ctk.CTkFrame):
                     # Update recognized sign panel with threshold-filtered predictions.
                     if self.recognized_sign_callback:
                         if left_display_result and left_is_new:
-                            self.recognized_sign_callback(left_display_result.sign_type.value, "Left")
+                            self.recognized_sign_callback(
+                                left_display_result.sign_type.value, "Left",
+                                left_display_result.confidence
+                            )
                         if right_display_result and right_is_new:
-                            self.recognized_sign_callback(right_display_result.sign_type.value, "Right")
+                            self.recognized_sign_callback(
+                                right_display_result.sign_type.value, "Right",
+                                right_display_result.confidence
+                            )
                     
                     # Update display in main thread
                     if frame is not None:
@@ -431,6 +437,10 @@ class MainWindow(ctk.CTk):
     Combines camera input, sign recognition, speech input/output, and video playback
     in a cohesive user interface with dark modern theme.
     """
+
+    # Only speak a confirmed sign when model confidence meets this threshold.
+    # Display (text) uses CameraPanel.CONFIDENCE_THRESHOLD = 0.75.
+    SPEECH_CONFIDENCE_THRESHOLD = 0.82
     
     def __init__(self):
         """Initialize main application window."""
@@ -806,21 +816,22 @@ class MainWindow(ctk.CTk):
             logger.error(f"Error during shutdown: {e}")
             self.destroy()
     
-    def _on_sign_recognized(self, sign_name: str, hand_side: str):
+    def _on_sign_recognized(self, sign_name: str, hand_side: str, confidence: float = 0.8):
         """
         Handle recognized sign callback.
         
         Args:
             sign_name: Name of recognized sign.
             hand_side: Which hand detected the sign (Left/Right).
+            confidence: Model confidence score (0.0–1.0).
         """
         try:
             # This callback can be invoked from the camera thread.
-            self.after(0, lambda s=sign_name: self._handle_sign_recognized_ui(s))
+            self.after(0, lambda s=sign_name, c=confidence: self._handle_sign_recognized_ui(s, c))
         except Exception as e:
             logger.error(f"Error handling sign recognition: {e}")
 
-    def _handle_sign_recognized_ui(self, sign_name: str):
+    def _handle_sign_recognized_ui(self, sign_name: str, confidence: float = 0.8):
         """Handle sign recognition updates on the UI thread only."""
         try:
             if not self.sign_to_text_converter:
@@ -829,7 +840,10 @@ class MainWindow(ctk.CTk):
             appended_word = self.sign_to_text_converter.add_confirmed_prediction(sign_name)
             if appended_word:
                 self._update_translation(appended_word)
-                self._speak_confirmed_sign_text(appended_word)
+                # Only synthesize speech when confidence clears the speech threshold.
+                # This prevents false TTS triggers from low-confidence predictions.
+                if confidence >= self.SPEECH_CONFIDENCE_THRESHOLD:
+                    self._speak_confirmed_sign_text(appended_word)
         except Exception as e:
             logger.error(f"Error handling sign recognition in UI thread: {e}")
 

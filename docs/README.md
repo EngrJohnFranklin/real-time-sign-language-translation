@@ -14,5 +14,6 @@ A desktop application that translates sign language to text and speech in real-t
 - Real-time sign language recognition
 - Bidirectional translation (sign ↔ text)
 - Text-to-speech output
-- Multi-language support
-- Translation history logging
+- Offline speech recognition
+- Sign animation playback from recognized speech
+- Accessibility-focused responsive UI layout

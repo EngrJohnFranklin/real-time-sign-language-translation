@@ -12,25 +12,39 @@ from typing import Optional, Tuple, List, Dict
 from enum import Enum
 import logging
 
+import pathlib
+
 import cv2
 import mediapipe as mp
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
+try:
+    from models.xgboost_classifier import XGBoostSignClassifier
+except ImportError:
+    try:
+        from xgboost_classifier import XGBoostSignClassifier
+    except ImportError:
+        XGBoostSignClassifier = None  # type: ignore[assignment,misc]
+
 
 class SignType(Enum):
-    """Enumeration of supported sign types."""
-    HELLO = "Hello"
-    THANK_YOU = "Thank You"
-    YES = "Yes"
-    NO = "No"
-    HELP = "Help"
-    GOOD_MORNING = "Good Morning"
-    SORRY = "Sorry"
-    PLEASE = "Please"
-    GOODBYE = "Goodbye"
-    I_LOVE_YOU = "I Love You"
+    """Enumeration of supported static gesture types.
+    
+    Optimized for MediaPipe Hands detection with maximum landmark distinctiveness.
+    Each gesture uses a single static hand configuration (no movement).
+    """
+    CLOSED_FIST = "Closed Fist"     # Sorry (hand fully closed)
+    OPEN_PALM = "Open Palm"         # Stop (all fingers extended)
+    THUMBS_UP = "Thumbs Up"         # Yes (thumb extended upward)
+    THUMBS_DOWN = "Thumbs Down"     # No (thumb extended downward)
+    INDEX_FINGER = "Index Finger"   # Help (only index finger extended)
+    PEACE_SIGN = "Peace Sign"       # Thank You (index + middle extended, other closed)
+    OK_SIGN = "OK Sign"             # Good (thumb + index circle)
+    I_LOVE_YOU = "I Love You"       # I Love You (thumb, index, pinky extended)
+    SHAKA = "Shaka"                 # Hello (thumb + pinky extended)
+    VULCAN = "Vulcan Salute"        # Goodbye (middle + ring gap, others extended)
     UNKNOWN = "Unknown"
 
 
@@ -240,14 +254,61 @@ class SignRecognizer:
                 min_tracking_confidence=0.5
             )
             self.analyzer = HandGeometryAnalyzer()
+            self.xgboost_classifier = None
+            self._try_load_xgboost()
             logger.info("SignRecognizer initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing SignRecognizer: {e}")
             raise
     
+    def _try_load_xgboost(self) -> None:
+        """Load the trained XGBoost classifier if the model file exists."""
+        if XGBoostSignClassifier is None:
+            return
+        model_path = pathlib.Path(__file__).parent.parent.parent / "data" / "models" / "sign_model.pkl"
+        if model_path.exists():
+            try:
+                self.xgboost_classifier = XGBoostSignClassifier(str(model_path))
+                logger.info("XGBoost classifier loaded — AI-based recognition active")
+            except Exception as exc:
+                logger.warning(f"Could not load XGBoost model, falling back to geometric rules: {exc}")
+        else:
+            logger.info(
+                "No trained model found — using geometric rules. "
+                "Run scripts/collect_training_data.py then scripts/train_xgboost_model.py to train."
+            )
+
+    def _classify_sign(
+        self, landmarks: List[Tuple[float, float, float]]
+    ) -> Tuple[SignType, float]:
+        """
+        Classify a sign using XGBoost when a trained model is available,
+        otherwise fall back to geometric rules with a fixed confidence of 0.8.
+
+        Args:
+            landmarks: 21 MediaPipe hand landmarks.
+
+        Returns:
+            (SignType, confidence) tuple.
+        """
+        if self.xgboost_classifier is not None:
+            label, confidence = self.xgboost_classifier.predict(landmarks)
+            if label is not None:
+                try:
+                    return SignType(label), confidence
+                except ValueError:
+                    logger.debug(f"Model returned unknown label '{label}', falling back to rules")
+
+        # Geometric rule fallback — confidence is not meaningful so use 0.8
+        return self._recognize_sign(landmarks), 0.8
+
     def process_frame(self, frame: np.ndarray) -> Tuple[Optional[SignResult], Optional[SignResult]]:
         """
         Process a frame and recognize signs in both hands.
+        
+        Supports detection of up to 2 hands. Uses a unified 126-element feature vector
+        (left hand + right hand) for classification, allowing the model to learn patterns
+        that involve both hands or just one (with the other hand zero-padded).
         
         Args:
             frame: Input frame from video capture (BGR format)
@@ -267,32 +328,73 @@ class SignRecognizer:
             if not results.multi_hand_landmarks or not results.multi_handedness:
                 return None, None
             
-            left_result = None
-            right_result = None
+            # Extract landmarks by handedness: left and right
+            left_landmarks = None
+            right_landmarks = None
             
-            # Process each detected hand
             for landmarks, handedness in zip(results.multi_hand_landmarks, results.multi_handedness):
                 # Convert landmarks to list of tuples
                 landmark_list = [
                     (lm.x, lm.y, lm.z) for lm in landmarks.landmark
                 ]
-                
-                hand_side = handedness.classification[0].label
-                recognized_sign = self._recognize_sign(landmark_list)
+                hand_side = handedness.classification[0].label  # "Left" or "Right"
                 
                 if hand_side == 'Right':
-                    right_result = SignResult(
-                        sign_type=recognized_sign,
-                        confidence=0.8,  # Geometric rules don't provide confidence scores
-                        hand_side='Right',
-                        landmarks=landmark_list
-                    )
+                    right_landmarks = landmark_list
                 else:
+                    left_landmarks = landmark_list
+            
+            # Classify using both hands (or one + padding)
+            left_result = None
+            right_result = None
+            
+            if self.xgboost_classifier is not None:
+                # Use the unified 126-element classifier
+                recognized_sign, confidence = self.xgboost_classifier.predict_both_hands(
+                    left_landmarks, right_landmarks
+                )
+                
+                if recognized_sign is not None:
+                    try:
+                        sign_type = SignType(recognized_sign)
+                    except ValueError:
+                        sign_type = SignType.UNKNOWN
+                    
+                    # Return the prediction for each hand that was detected
+                    if left_landmarks is not None:
+                        left_result = SignResult(
+                            sign_type=sign_type,
+                            confidence=confidence,
+                            hand_side='Left',
+                            landmarks=left_landmarks
+                        )
+                    
+                    if right_landmarks is not None:
+                        right_result = SignResult(
+                            sign_type=sign_type,
+                            confidence=confidence,
+                            hand_side='Right',
+                            landmarks=right_landmarks
+                        )
+            else:
+                # Fallback: use geometric rules (single-hand interface)
+                # Process each hand independently
+                if left_landmarks is not None:
+                    recognized_sign = self._recognize_sign(left_landmarks)
                     left_result = SignResult(
                         sign_type=recognized_sign,
                         confidence=0.8,
                         hand_side='Left',
-                        landmarks=landmark_list
+                        landmarks=left_landmarks
+                    )
+                
+                if right_landmarks is not None:
+                    recognized_sign = self._recognize_sign(right_landmarks)
+                    right_result = SignResult(
+                        sign_type=recognized_sign,
+                        confidence=0.8,
+                        hand_side='Right',
+                        landmarks=right_landmarks
                     )
             
             return left_result, right_result

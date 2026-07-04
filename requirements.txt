@@ -74,6 +74,15 @@ mypy==1.5.1
 # Mypy: Static type checker for Python, validates type annotations,
 # catches type-related bugs before runtime
 
+# ---- MACHINE LEARNING (LIGHTWEIGHT AI) ----
+xgboost>=2.0.0
+# XGBoost: Gradient boosting classifier used for sign language recognition.
+# Runs on CPU only, 1-5 ms inference per frame, replaces geometric rule heuristics.
+
+scikit-learn>=1.3.0
+# scikit-learn: Provides LabelEncoder, cross_val_score, and classification_report
+# used during model training in scripts/train_xgboost_model.py.
+
 # ---- UTILITIES ----
 tqdm==4.66.1
 # tqdm: Progress bar library for long-running operations,
