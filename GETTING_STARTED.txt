@@ -1,0 +1,291 @@
+"""
+GETTING STARTED: Real-Time Sign Language Translation
+
+This guide will help you understand and use the new real-time translation system.
+
+═══════════════════════════════════════════════════════════════════════════════
+WHAT'S NEW?
+═══════════════════════════════════════════════════════════════════════════════
+
+The sign language translation app now behaves like a REAL translation system:
+
+❌ OLD: Accumulated text that kept growing
+   "Thumbs Up Thumbs Up Thumbs Up Thumbs Up"
+   TTS repeated: "Yes... Yes... Yes... Yes..."
+
+✅ NEW: Single current translation that's natural and clean
+   "Yes"
+   TTS speaks once: "Yes"
+
+═══════════════════════════════════════════════════════════════════════════════
+STEP-BY-STEP GUIDE
+═══════════════════════════════════════════════════════════════════════════════
+
+STEP 1: RUN THE APPLICATION
+─────────────────────────────
+  cd real-time-sign-language-translation
+  python src/main.py
+
+  You'll see the GUI appear with:
+  - Left side: Live camera feed
+  - Right side: Avatar/animation area
+  - Bottom left: Translation display (initially empty)
+  - Bottom right: Speech status indicator
+  - Buttons: "Start Camera" and "Speak"
+
+
+STEP 2: START THE CAMERA
+─────────────────────────
+  Click the "▶ Start Camera" button
+
+  Status changes to: "Camera running ✓"
+  Button changes to: "⏹ Stop Camera"
+
+
+STEP 3: PERFORM A GESTURE
+──────────────────────────
+  Show one of these 10 gestures to your camera:
+
+  👍 Thumbs Up    → "Yes"
+  👎 Thumbs Down  → "No"
+  🤙 Shaka/Hello  → "Hello"
+  ✌️ Peace Sign   → "Thank You"
+  ✋ Open Palm    → "Good Morning"
+  ✊ Closed Fist  → "Sorry"
+  🖖 Vulcan      → "Goodbye"
+  🤘 I Love You   → "I Love You"
+  ☝️ Index Finger → "Help"
+  👌 OK Sign      → "Good"
+
+
+STEP 4: OBSERVE THE TRANSLATION
+────────────────────────────────
+  The translation display (left bottom) shows:
+  - Clear, natural language meaning (not technical gesture name)
+  - Speaker icon 🔊 appears briefly (indicates TTS was triggered)
+
+  Example sequence:
+  1. You show thumbs up → Display shows "Yes" → Speaker says "Yes" (once)
+  2. You hold thumbs up → Display stays "Yes" → No repeat speech
+  3. You show peace sign → Display changes "Thank You" → Speaker says "Thank You"
+  4. You remove hand → Display clears after 3 seconds
+
+
+STEP 5: STOP THE CAMERA
+───────────────────────
+  Click the "⏹ Stop Camera" button
+
+  Status changes to: "Camera stopped"
+  Button changes to: "▶ Start Camera"
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY BEHAVIORS
+═══════════════════════════════════════════════════════════════════════════════
+
+1. NATURAL LANGUAGE DISPLAY
+   Gestures are translated to meaningful words:
+   - Gesture: "Shaka" → Translation: "Hello"
+   - Gesture: "Thumbs Up" → Translation: "Yes"
+
+2. SINGLE SIGN AT A TIME
+   Only shows the currently recognized sign, not accumulated history.
+
+3. NO DUPLICATE UPDATES
+   If you hold the same gesture, the display doesn't flicker or repeat.
+
+4. SMART SPEECH
+   - TTS speaks ONCE when you first show a gesture
+   - If you hold the same gesture, it doesn't repeat the speech
+   - If you show a different gesture, it speaks the new translation
+
+5. AUTO-CLEAR
+   If no gesture is detected for 3 seconds, the display automatically clears.
+
+6. CONFIDENCE-BASED
+   For a gesture to trigger speech, confidence must be ≥ 70%.
+   Low confidence gestures (< 70%) still display but don't speak.
+
+═══════════════════════════════════════════════════════════════════════════════
+TESTING THE DEMO
+═════════════════════════════════════════════════════════════════════════════
+
+Want to test without a camera? Run the demo:
+
+  python demo_realtime_translation.py
+
+This shows:
+  ✓ All gesture-to-meaning mappings
+  ✓ How the system handles new gestures
+  ✓ How it ignores duplicates
+  ✓ How timeout clearing works
+  ✓ How speech triggering works
+
+═══════════════════════════════════════════════════════════════════════════════
+COMMON SCENARIOS
+═════════════════════════════════════════════════════════════════════════════════
+
+SCENARIO 1: Show a gesture
+───────────────────────────
+User action: Show "Yes" (thumbs up)
+Display shows: "Yes"
+Speaker says: "Yes"
+What happens: New gesture detected → translate → display → speak
+
+
+SCENARIO 2: Hold the same gesture
+──────────────────────────────────
+User action: Keep thumbs up visible
+Display shows: "Yes" (stays the same)
+Speaker: Silent (no repeat)
+What happens: Same gesture detected → duplicate ignored → no change
+
+
+SCENARIO 3: Change to a different gesture
+───────────────────────────────────────────
+User action: Replace thumbs up with peace sign
+Display shows: "Thank You" (updates immediately)
+Speaker says: "Thank You"
+What happens: Different gesture → translate → display updates → speak new
+
+
+SCENARIO 4: Remove your hand (no gesture)
+──────────────────────────────────────────
+User action: Put hand down for 3+ seconds
+Display shows: "" (clears)
+Speaker: Silent
+What happens: No gesture for 3 seconds → timeout → display clears
+
+
+SCENARIO 5: Quick gesture with low confidence
+──────────────────────────────────────────────
+User action: Quick, blurry gesture showing "Help"
+Display shows: "Help" (displays)
+Speaker: Silent (confidence < 70%)
+What happens: Low confidence → no TTS but still displays
+
+═══════════════════════════════════════════════════════════════════════════════
+TROUBLESHOOTING
+═════════════════════════════════════════════════════════════════════════════════
+
+Q: Why isn't my gesture being recognized?
+A: 1. Ensure good lighting
+   2. Show gesture fully in frame
+   3. Hold steady for 1 second
+   4. Try another gesture to verify camera is working
+
+Q: Why doesn't the TTS speak?
+A: 1. Confidence might be < 70% (too low)
+   2. Volume might be muted
+   3. TTS only speaks once per gesture (not repeated while held)
+   4. Check "Speech Status" indicator on right side
+
+Q: Why did the display clear?
+A: Display auto-clears after 3 seconds of no gesture detection.
+   This is expected behavior to keep the UI clean.
+
+Q: Can I adjust the timeout?
+A: Yes! Edit src/translation/realtime_translator.py:
+   DISPLAY_TIMEOUT = 3.0  (change to 2.0, 5.0, etc.)
+
+Q: Why is confidence sometimes low?
+A: Possible reasons:
+   - Poor lighting
+   - Hand partially out of frame
+   - Background movement/clutter
+   - Camera quality issues
+
+═══════════════════════════════════════════════════════════════════════════════
+COMPARISON: OLD vs NEW
+═════════════════════════════════════════════════════════════════════════════════
+
+Old System (Accumulated):
+───────────────────────
+Time    You show...     Display shows:
+0s      Thumbs up       "Thumbs Up"
+0.5s    (held)          "Thumbs Up Thumbs Up"
+1s      (held)          "Thumbs Up Thumbs Up Thumbs Up"
+1.5s    Peace sign      "Thumbs Up Thumbs Up Thumbs Up Peace Sign"
+2s      (held)          "Thumbs Up Thumbs Up Thumbs Up Peace Sign Peace Sign"
+
+→ Confusing, repetitive, keeps growing
+
+New System (Current Only):
+──────────────────────
+Time    You show...     Display shows:
+0s      Thumbs up       "Yes"
+0.5s    (held)          "Yes" (no change)
+1s      (held)          "Yes" (no change)
+1.5s    Peace sign      "Thank You" (updates)
+2s      (held)          "Thank You" (no change)
+
+→ Clear, focused, natural
+
+═══════════════════════════════════════════════════════════════════════════════
+ADVANCED: CUSTOMIZATION
+═════════════════════════════════════════════════════════════════════════════════
+
+Want to customize the system? Edit these files:
+
+1. CHANGE GESTURE MEANINGS:
+   File: src/translation/realtime_translator.py
+   Look for: GESTURE_TO_MEANING = {...}
+   
+   Example: Change "Thumbs Up" meaning from "Yes" to "Good"
+   "Thumbs Up": "Good",  # was "Yes"
+
+2. CHANGE TIMEOUT:
+   File: src/translation/realtime_translator.py
+   Look for: DISPLAY_TIMEOUT = 3.0
+   
+   Example: Clear after 2 seconds instead of 3
+   DISPLAY_TIMEOUT = 2.0
+
+3. CHANGE TTS CONFIDENCE THRESHOLD:
+   File: src/translation/realtime_translator.py
+   Look for: SPEECH_CONFIDENCE_THRESHOLD = 0.70
+   
+   Example: Only speak if very confident
+   SPEECH_CONFIDENCE_THRESHOLD = 0.85
+
+═══════════════════════════════════════════════════════════════════════════════
+DOCUMENTATION REFERENCE
+═════════════════════════════════════════════════════════════════════════════════
+
+For more details, see:
+
+📄 QUICK_REFERENCE.txt
+   → Before/after comparison, visual flow diagrams
+
+📄 REALTIME_TRANSLATION_IMPLEMENTATION.md
+   → Complete technical documentation, architecture details
+
+🎮 demo_realtime_translation.py
+   → Interactive demo showing all features
+
+═══════════════════════════════════════════════════════════════════════════════
+NEXT STEPS
+═════════════════════════════════════════════════════════════════════════════════
+
+1. Run the application:
+   python src/main.py
+
+2. Try different gestures and observe the behavior
+
+3. Read QUICK_REFERENCE.txt for visual comparisons
+
+4. Check REALTIME_TRANSLATION_IMPLEMENTATION.md for technical details
+
+5. Customize GESTURE_TO_MEANING if needed
+
+6. Use demo_realtime_translation.py for testing without camera
+
+═══════════════════════════════════════════════════════════════════════════════
+SUPPORT
+═════════════════════════════════════════════════════════════════════════════════
+
+All code changes are backward compatible.
+Existing functionality is preserved.
+System architecture unchanged - easy to integrate with other components.
+
+═══════════════════════════════════════════════════════════════════════════════
+"""

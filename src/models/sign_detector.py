@@ -34,6 +34,7 @@ class SignType(Enum):
     
     Optimized for MediaPipe Hands detection with maximum landmark distinctiveness.
     Each gesture uses a single static hand configuration (no movement).
+    Maps to natural language meanings for translation display.
     """
     CLOSED_FIST = "Closed Fist"     # Sorry (hand fully closed)
     OPEN_PALM = "Open Palm"         # Stop (all fingers extended)
@@ -43,9 +44,42 @@ class SignType(Enum):
     PEACE_SIGN = "Peace Sign"       # Thank You (index + middle extended, other closed)
     OK_SIGN = "OK Sign"             # Good (thumb + index circle)
     I_LOVE_YOU = "I Love You"       # I Love You (thumb, index, pinky extended)
-    SHAKA = "Shaka"                 # Hello (thumb + pinky extended)
-    VULCAN = "Vulcan Salute"        # Goodbye (middle + ring gap, others extended)
+    HELLO = "Hello"                 # Hello (thumb + pinky extended)
+    GOODBYE = "Goodbye"             # Goodbye (middle + ring gap, others extended)
     UNKNOWN = "Unknown"
+    
+    # Legacy aliases for backward compatibility
+    SHAKA = "Hello"                 # Alias for HELLO
+    VULCAN = "Goodbye"              # Alias for GOODBYE
+
+
+# Mapping from gesture enum names to natural language meanings for translation
+GESTURE_TO_MEANING = {
+    "Closed Fist": "Sorry",
+    "Open Palm": "Good Morning",
+    "Thumbs Up": "Yes",
+    "Thumbs Down": "No",
+    "Index Finger": "Help",
+    "Peace Sign": "Thank You",
+    "OK Sign": "Good",
+    "I Love You": "I Love You",
+    "Hello": "Hello",
+    "Goodbye": "Goodbye",
+    "Please": "Please",
+    "Unknown": "",
+}
+
+
+def get_meaning(sign_type: 'SignType') -> str:
+    """Get natural language meaning for a sign type.
+    
+    Args:
+        sign_type: SignType enum value
+        
+    Returns:
+        Natural language meaning (e.g. 'Hello', 'Thank You')
+    """
+    return GESTURE_TO_MEANING.get(sign_type.value, "")
 
 
 @dataclass
@@ -417,27 +451,33 @@ class SignRecognizer:
             if not landmarks or len(landmarks) < 21:
                 return SignType.UNKNOWN
             
-            # Check for each sign using geometric rules
+            # Check for each sign using geometric rules.
+            # Enum mapping (gesture name → natural language meaning):
+            #   HELLO        → Hello          PEACE_SIGN  → Thank You
+            #   THUMBS_UP    → Yes            THUMBS_DOWN → No
+            #   INDEX_FINGER → Help           OPEN_PALM   → Good Morning / Please
+            #   CLOSED_FIST  → Sorry          GOODBYE     → Goodbye
+            #   I_LOVE_YOU   → I Love You
             if self._is_i_love_you(landmarks):
                 return SignType.I_LOVE_YOU
             elif self._is_thumbs_up_or_hello(landmarks):
-                return SignType.HELLO
+                return SignType.HELLO          # Hello (open-hand wave)
             elif self._is_thank_you(landmarks):
-                return SignType.THANK_YOU
+                return SignType.PEACE_SIGN     # Thank You (all fingers, palm out)
             elif self._is_yes(landmarks):
-                return SignType.YES
+                return SignType.THUMBS_UP      # Yes (thumb up, fist)
             elif self._is_no(landmarks):
-                return SignType.NO
+                return SignType.THUMBS_DOWN    # No (V-shape / downward gesture)
             elif self._is_help(landmarks):
-                return SignType.HELP
+                return SignType.INDEX_FINGER   # Help (index pointing)
             elif self._is_good_morning(landmarks):
-                return SignType.GOOD_MORNING
+                return SignType.OPEN_PALM      # Good Morning (open palm, hand high)
             elif self._is_sorry(landmarks):
-                return SignType.SORRY
+                return SignType.CLOSED_FIST    # Sorry (closed fist on chest)
             elif self._is_please(landmarks):
-                return SignType.PLEASE
+                return SignType.OPEN_PALM      # Please (open palm, upward)
             elif self._is_goodbye(landmarks):
-                return SignType.GOODBYE
+                return SignType.GOODBYE        # Goodbye (wave at shoulder height)
             else:
                 return SignType.UNKNOWN
                 

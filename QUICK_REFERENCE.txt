@@ -1,0 +1,171 @@
+"""
+QUICK REFERENCE: Real-Time Sign Language Translation System
+
+═══════════════════════════════════════════════════════════════════════════════
+BEFORE vs AFTER COMPARISON
+═══════════════════════════════════════════════════════════════════════════════
+
+GESTURE INPUT          BEFORE (OLD)              AFTER (NEW)
+─────────────────────────────────────────────────────────────────────────────
+User shows 👍          Output: "Thumbs Up"       Output: "Yes"  
+User shows 🤙          Output: "Shaka"           Output: "Hello"
+User shows ✌️          Output: "Peace Sign"      Output: "Thank You"
+User shows 🖖          Output: "Vulcan"          Output: "Goodbye"
+
+DISPLAY BEHAVIOR      BEFORE (OLD)              AFTER (NEW)
+─────────────────────────────────────────────────────────────────────────────
+Mode                  Accumulated text          Single current sign
+Example               "Yes Yes Yes Yes"         "Yes"
+Update trigger        Every frame               When sign changes
+Duplicate signs       Repeated in display       Ignored
+Timeout               No timeout                Clears after 3 seconds
+TTS                   "Yes" "Yes" "Yes" (repeat) "Yes" (once only)
+
+═══════════════════════════════════════════════════════════════════════════════
+NATURAL LANGUAGE MAPPING (10 GESTURES)
+═══════════════════════════════════════════════════════════════════════════════
+
+GESTURE ENUM NAME       GESTURE NAME      → NATURAL LANGUAGE
+─────────────────────────────────────────────────────────────────────────────
+CLOSED_FIST             Closed Fist       → "Sorry"
+OPEN_PALM               Open Palm         → "Good Morning"  
+THUMBS_UP               Thumbs Up         → "Yes"
+THUMBS_DOWN             Thumbs Down       → "No"
+INDEX_FINGER            Index Finger      → "Help"
+PEACE_SIGN              Peace Sign        → "Thank You"
+OK_SIGN                 OK Sign           → "Good"
+I_LOVE_YOU              I Love You        → "I Love You"
+HELLO                   Hello             → "Hello"  [was SHAKA]
+GOODBYE                 Goodbye           → "Goodbye" [was VULCAN]
+
+═══════════════════════════════════════════════════════════════════════════════
+REAL-TIME BEHAVIOR FLOW
+═══════════════════════════════════════════════════════════════════════════════
+
+TIME    ACTION                          DISPLAY    SPEECH
+────────────────────────────────────────────────────────────────────────────
+t=0     User shows "Hello"              "Hello"    "Hello" (speaks once)
+t=500ms Same "Hello" held               "Hello"    (no repeat)
+t=1.0s  Same "Hello" held               "Hello"    (no repeat)
+t=1.5s  User changes to "Thank You"    "Thank You" "Thank You" (new sign)
+t=2.0s  Same "Thank You" held           "Thank You" (no repeat)
+t=3.0s  Same "Thank You" held           "Thank You" (no repeat)
+t=3.5s  No gesture (3+ seconds)        ""          (cleared)
+t=4.0s  User shows "Yes"               "Yes"       "Yes" (new sign)
+
+═══════════════════════════════════════════════════════════════════════════════
+KEY IMPROVEMENTS
+═══════════════════════════════════════════════════════════════════════════════
+
+✓ USER EXPERIENCE
+  - Clear, meaningful output ("Hello" not "Shaka")
+  - No repetitive text accumulation
+  - Natural speech pattern (speaks once, not repeatedly)
+  - Clean display (auto-clears stale translations)
+
+✓ PERFORMANCE
+  - UI updates only on sign change (not every frame)
+  - Reduced TTS overhead (no repeated speech)
+  - Minimal CPU impact
+
+✓ RELIABILITY
+  - Robust duplicate detection
+  - Handles edge cases (low confidence, timeouts)
+  - Backward compatible with existing system
+
+═══════════════════════════════════════════════════════════════════════════════
+CONFIGURATION
+═══════════════════════════════════════════════════════════════════════════════
+
+File: src/translation/realtime_translator.py
+
+DISPLAY_TIMEOUT = 3.0
+  → Change to 2.0 for faster clearing, 5.0 for slower
+
+SPEECH_CONFIDENCE_THRESHOLD = 0.70
+  → Change to 0.80 for stricter TTS, 0.60 for more permissive
+
+GESTURE_TO_MEANING = {...}
+  → Add/modify gesture-to-meaning mappings here
+
+═══════════════════════════════════════════════════════════════════════════════
+USAGE
+═══════════════════════════════════════════════════════════════════════════════
+
+1. RUN THE APPLICATION:
+   python src/main.py
+
+2. START CAMERA:
+   Click "▶ Start Camera" button
+
+3. SHOW A GESTURE:
+   Perform any of the 10 supported gestures
+
+4. OBSERVE:
+   - Natural language meaning appears (e.g., "Hello")
+   - TTS speaks the meaning (once)
+   - Display persists while gesture is held
+   - Display clears after 3 seconds of no gesture
+
+5. CHANGE GESTURES:
+   - Different gesture: display updates, new speech
+   - Same gesture: no change (duplicate ignored)
+   - No gesture: display clears after timeout
+
+═══════════════════════════════════════════════════════════════════════════════
+TESTING
+═══════════════════════════════════════════════════════════════════════════════
+
+RUN DEMO:
+  python demo_realtime_translation.py
+
+This shows:
+  ✓ Gesture-to-meaning mapping
+  ✓ New sign detection
+  ✓ Duplicate detection
+  ✓ Timeout behavior
+  ✓ TTS logic
+
+═══════════════════════════════════════════════════════════════════════════════
+ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════════════
+
+SIGN DETECTION
+    ↓
+CameraController.on_frame_received()
+    ↓
+SignController.on_sign_recognized()
+    ↓
+RealTimeTranslator.update()
+    ├─→ Compare gesture names (duplicate detection)
+    ├─→ Get natural language meaning
+    ├─→ Check confidence for TTS
+    └─→ Return (display_text, should_speak)
+    ↓
+MainWindow.update_translation()  [display]
+SpeechService.speak_async()      [TTS]
+SignController._schedule_timeout_check()
+    ↓
+Every 500ms: check_timeout()
+    └─→ If 3+ seconds: clear_display()
+
+═══════════════════════════════════════════════════════════════════════════════
+FILES SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+MODIFIED (4):
+  ✓ src/models/sign_detector.py
+  ✓ src/controllers/sign_controller.py  
+  ✓ scripts/verify_gesture_landmarks.py
+  ✓ scripts/analyze_dataset.py
+
+CREATED (2):
+  ✓ src/translation/realtime_translator.py (core engine)
+  ✓ demo_realtime_translation.py (testing/demo)
+
+DOCUMENTATION (2):
+  ✓ REALTIME_TRANSLATION_IMPLEMENTATION.md (detailed spec)
+  ✓ This file (quick reference)
+
+═══════════════════════════════════════════════════════════════════════════════
+"""

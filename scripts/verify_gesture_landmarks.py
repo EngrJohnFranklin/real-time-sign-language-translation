@@ -177,7 +177,7 @@ GESTURE_LANDMARKS = {
         "hint": "Index up, middle and ring down, thumb and pinky out",
     },
     
-    "Shaka": {
+    "Hello": {
         "description": "Thumb and pinky extended, middle three closed",
         "key_features": [
             "Thumb and pinky extended (non-adjacent)",
@@ -195,7 +195,7 @@ GESTURE_LANDMARKS = {
         "hint": "Extend your thumb and pinky, close the middle three",
     },
     
-    "Vulcan Salute": {
+    "Goodbye": {
         "description": "All 5 fingers extended with gap between middle and ring",
         "key_features": [
             "All five fingers extended",

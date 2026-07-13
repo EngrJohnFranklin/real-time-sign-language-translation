@@ -68,8 +68,8 @@ def analyze_dataset(csv_path: pathlib.Path):
         "Peace Sign",
         "OK Sign",
         "I Love You",
-        "Shaka",
-        "Vulcan Salute",
+        "Hello",
+        "Goodbye",
     }
     
     missing_gestures = expected_gestures - set(gesture_counts.keys())

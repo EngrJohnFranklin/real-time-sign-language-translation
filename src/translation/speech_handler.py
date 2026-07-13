@@ -535,22 +535,60 @@ class TextToSpeechEngine:
             
             self.is_speaking = False
             logger.debug(f"Spoken: '{text}'")
-        except Exception as e:
-            logger.error(f"Error speaking text: {e}")
+        except Exception:
+            logger.exception("Error speaking text: %r", text[:40])
             self.is_speaking = False
     
-    def speak_async(self, text: str):
+    def speak_async(self, text: str, sequence_id: int = 0,
+                    is_current: Optional[Callable[[], bool]] = None):
         """
         Speak text asynchronously without blocking.
-        
+
+        A new pyttsx3 engine is created inside the worker thread on every call.
+        This is required on Windows because SAPI5 is a COM Single-Threaded
+        Apartment (STA) object: the engine created in __init__ (main thread)
+        cannot be used from a different thread — engine.runAndWait() returns
+        immediately without producing audio.  Creating the engine in the same
+        thread that calls runAndWait() correctly initialises the COM apartment
+        and allows the speech event loop to pump messages.
+
+        If is_current() is provided and returns False, this speech is skipped
+        to prevent stale queued speech from playing after newer recognition.
+
         Args:
             text: Text to synthesize and speak.
+            sequence_id: Optional sequence number for tracking.
+            is_current: Optional callable that returns True if this speech is still current.
         """
+        def _worker(text: str, rate: int, volume: float, seq_id: int,
+                    is_curr: Optional[Callable[[], bool]]) -> None:
+            try:
+                # Skip if a newer speech has been requested (stale suppression)
+                if is_curr and not is_curr():
+                    logger.debug("TTS worker: skipping stale speech (sequence %d)", seq_id)
+                    return
+                
+                engine = pyttsx3.init()
+                engine.setProperty('rate', rate)
+                engine.setProperty('volume', volume)
+                logger.debug("TTS worker: engine.say(%r) [sequence %d]", text[:40], seq_id)
+                engine.say(text)
+                logger.debug("TTS worker: engine.runAndWait() starting [sequence %d]", seq_id)
+                engine.runAndWait()
+                logger.debug("TTS worker: engine.runAndWait() completed [sequence %d]", seq_id)
+            except Exception:
+                logger.exception("TTS worker thread error for %r", text[:40])
+
         try:
-            thread = threading.Thread(target=self.speak, args=(text, True), daemon=True)
+            thread = threading.Thread(
+                target=_worker,
+                args=(text, self.rate, self.volume, sequence_id, is_current),
+                daemon=True,
+            )
             thread.start()
-        except Exception as e:
-            logger.error(f"Error in async speech: {e}")
+            logger.debug("TTS async thread started for %r [sequence %d]", text[:40], sequence_id)
+        except Exception:
+            logger.exception("Error starting async speech thread")
     
     def get_available_voices(self) -> List[dict]:
         """
@@ -655,15 +693,17 @@ class SpeechHandler:
         """
         try:
             self.recognizer.start_listening(callback)
-        except Exception as e:
-            logger.error(f"Error starting recognition: {e}")
+        except Exception:
+            logger.exception("Error starting recognition")
+            raise
     
     def stop_listening(self):
         """Stop listening for speech input."""
         try:
             self.recognizer.stop_listening()
-        except Exception as e:
-            logger.error(f"Error stopping recognition: {e}")
+        except Exception:
+            logger.exception("Error stopping recognition")
+            raise
     
     def speak(self, text: str, wait: bool = True):
         """
@@ -678,17 +718,22 @@ class SpeechHandler:
         except Exception as e:
             logger.error(f"Error speaking text: {e}")
     
-    def speak_async(self, text: str):
+    def speak_async(self, text: str, sequence_id: int = 0, 
+                    is_current: Optional[Callable[[], bool]] = None):
         """
         Speak text asynchronously without blocking.
         
         Args:
             text: Text to speak.
+            sequence_id: Optional sequence number to track recognition order.
+            is_current: Optional callable that returns True if this speech is still current.
+                       If returns False, execution is skipped (stale speech suppression).
         """
         try:
-            self.tts_engine.speak_async(text)
-        except Exception as e:
-            logger.error(f"Error in async speech: {e}")
+            self.tts_engine.speak_async(text, sequence_id=sequence_id, is_current=is_current)
+        except Exception:
+            logger.exception("Error in async speech")
+            raise
     
     def cleanup(self):
         """Clean up all speech resources."""
