@@ -38,12 +38,12 @@ camera, audio, and video work in background threads to keep the UI responsive.
 │  State Management                                       │
 │    src/app/app_state.py  (AppState — thread-safe)       │
 ├─────────────────────────────────────────────────────────┤
-│  Domain Layer (unchanged)                               │
+│  Domain Layer                                           │
 │    src/models/sign_detector.py   (SignRecognizer)       │
 │    src/translation/speech_handler.py  (Vosk + pyttsx3)  │
 │    src/translation/sign_to_text.py   (de-dup converter) │
 │    src/models/xgboost_classifier.py                     │
-│    src/utils/*   src/database/*   src/camera/*          │
+│    src/utils/landmark_normalizer.py  (XGBoost features) │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -141,7 +141,7 @@ camera, audio, and video work in background threads to keep the UI responsive.
 All controllers read/write state through typed setters (`set_translation()`,
 `set_camera_running()`, …) rather than mutating raw attributes.
 
-### 4.6 Domain Layer (unchanged)
+### 4.6 Domain Layer
 
 | Module | Technology | Role |
 |--------|-----------|------|
@@ -149,6 +149,7 @@ All controllers read/write state through typed setters (`set_translation()`,
 | `translation/speech_handler.py` | Vosk + pyttsx3 | Offline STT + TTS |
 | `translation/sign_to_text.py` | (pure Python) | Sign-label de-dup + text accumulation |
 | `ui/video_player.py` | OpenCV + CTk | Video file playback + queue management |
+| `utils/landmark_normalizer.py` | (pure Python) | Hand landmark normalization for XGBoost |
 
 ---
 
@@ -284,5 +285,10 @@ All components verified against the live system after refactoring.
 | `src/ui/video_player.py` | UNCHANGED | VideoPlayer + VideoPlayerPanel |
 | `src/models/*` | UNCHANGED | Domain models |
 | `src/translation/*` | UNCHANGED | Speech handler + sign-to-text |
-| `src/utils/*` | UNCHANGED | Config, constants, validators |
+| `src/utils/landmark_normalizer.py` | ACTIVE | Hand landmark normalization (imported by models/xgboost_classifier.py) |
+| `src/utils/constants.py` | INACTIVE | Utility constants (not currently imported) |
+| `src/utils/validators.py` | INACTIVE | Validation helpers (not currently imported) |
+| `src/utils/logger.py` | INACTIVE | Logging utilities (not currently imported) |
+| `src/database/*` | LEGACY | Database module (not used in current system) |
+| `src/camera/*` | LEGACY | Camera module stubs (replaced by CameraService) |
 
