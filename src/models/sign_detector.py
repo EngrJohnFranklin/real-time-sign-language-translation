@@ -1,9 +1,14 @@
 """
-Sign Language Detector using MediaPipe Hand Landmarks and Geometric Rules.
+Sign Language Detector using MediaPipe Hand Landmarks.
 
-This module recognizes 10 specific sign language gestures using hand landmark
-positions and geometric properties (angles, distances) without requiring ML models.
-Supported signs: Hello, Thank You, Yes, No, Help, Good Morning, Sorry, Please, Goodbye, I Love You.
+This module recognizes FSL (Filipino Sign Language) fingerspelling labels —
+the 26-letter alphabet (A-Z) and numbers 0-10 — using a trained XGBoost
+classifier on 126-element normalized landmark vectors.
+
+The HandGeometryAnalyzer and geometric helper methods are retained for
+structural compatibility but are not tuned for fingerspelling shapes.
+All 36 label predictions go through the XGBoost classifier; the geometric
+fallback returns UNKNOWN when no trained model is available.
 """
 
 import math
@@ -30,56 +35,58 @@ except ImportError:
 
 
 class SignType(Enum):
-    """Enumeration of supported static gesture types.
-    
-    Optimized for MediaPipe Hands detection with maximum landmark distinctiveness.
-    Each gesture uses a single static hand configuration (no movement).
-    Maps to natural language meanings for translation display.
+    """Enumeration of FSL fingerspelling labels.
+
+    Contains the 26 letters of the Filipino Sign Language (FSL) alphabet
+    and the numbers 0-10, for a total of 37 entries (36 active + UNKNOWN).
+
+    Recognition for all 36 labels is performed exclusively by the XGBoost
+    classifier trained on collected landmark data.  The geometric fallback
+    (HandGeometryAnalyzer / _recognize_sign) is structurally kept but is
+    not tuned for fingerspelling shapes and returns UNKNOWN when invoked.
     """
-    CLOSED_FIST = "Closed Fist"     # Sorry (hand fully closed)
-    OPEN_PALM = "Open Palm"         # Stop (all fingers extended)
-    THUMBS_UP = "Thumbs Up"         # Yes (thumb extended upward)
-    THUMBS_DOWN = "Thumbs Down"     # No (thumb extended downward)
-    INDEX_FINGER = "Index Finger"   # Help (only index finger extended)
-    PEACE_SIGN = "Peace Sign"       # Thank You (index + middle extended, other closed)
-    OK_SIGN = "OK Sign"             # Good (thumb + index circle)
-    I_LOVE_YOU = "I Love You"       # I Love You (thumb, index, pinky extended)
-    HELLO = "Hello"                 # Hello (thumb + pinky extended)
-    GOODBYE = "Goodbye"             # Goodbye (middle + ring gap, others extended)
+    # --- FSL Alphabet (A-Z) ---
+    # TODO: fill in FSL handshape descriptions per letter from your reference image
+    LETTER_A = "A"   # placeholder — see FSL alphabet reference
+    LETTER_B = "B"   # placeholder
+    LETTER_C = "C"   # placeholder
+    LETTER_D = "D"   # placeholder
+    LETTER_E = "E"   # placeholder
+    LETTER_F = "F"   # placeholder
+    LETTER_G = "G"   # placeholder
+    LETTER_H = "H"   # placeholder
+    LETTER_I = "I"   # placeholder
+    LETTER_J = "J"   # placeholder
+    LETTER_K = "K"   # placeholder
+    LETTER_L = "L"   # placeholder
+    LETTER_M = "M"   # placeholder
+    LETTER_N = "N"   # placeholder
+    LETTER_O = "O"   # placeholder
+    LETTER_P = "P"   # placeholder
+    LETTER_Q = "Q"   # placeholder
+    LETTER_R = "R"   # placeholder
+    LETTER_S = "S"   # placeholder
+    LETTER_T = "T"   # placeholder
+    LETTER_U = "U"   # placeholder
+    LETTER_V = "V"   # placeholder
+    LETTER_W = "W"   # placeholder
+    LETTER_X = "X"   # placeholder
+    LETTER_Y = "Y"   # placeholder
+    LETTER_Z = "Z"   # placeholder
+    # --- FSL Numbers (0-10) ---
+    # TODO: fill in FSL handshape descriptions per number from your reference image
+    NUMBER_0  = "0"   # placeholder
+    NUMBER_1  = "1"   # placeholder
+    NUMBER_2  = "2"   # placeholder
+    NUMBER_3  = "3"   # placeholder
+    NUMBER_4  = "4"   # placeholder
+    NUMBER_5  = "5"   # placeholder
+    NUMBER_6  = "6"   # placeholder
+    NUMBER_7  = "7"   # placeholder
+    NUMBER_8  = "8"   # placeholder
+    NUMBER_9  = "9"   # placeholder
+    NUMBER_10 = "10"  # placeholder
     UNKNOWN = "Unknown"
-    
-    # Legacy aliases for backward compatibility
-    SHAKA = "Hello"                 # Alias for HELLO
-    VULCAN = "Goodbye"              # Alias for GOODBYE
-
-
-# Mapping from gesture enum names to natural language meanings for translation
-GESTURE_TO_MEANING = {
-    "Closed Fist": "Sorry",
-    "Open Palm": "Good Morning",
-    "Thumbs Up": "Yes",
-    "Thumbs Down": "No",
-    "Index Finger": "Help",
-    "Peace Sign": "Thank You",
-    "OK Sign": "Good",
-    "I Love You": "I Love You",
-    "Hello": "Hello",
-    "Goodbye": "Goodbye",
-    "Please": "Please",
-    "Unknown": "",
-}
-
-
-def get_meaning(sign_type: 'SignType') -> str:
-    """Get natural language meaning for a sign type.
-    
-    Args:
-        sign_type: SignType enum value
-        
-    Returns:
-        Natural language meaning (e.g. 'Hello', 'Thank You')
-    """
-    return GESTURE_TO_MEANING.get(sign_type.value, "")
 
 
 @dataclass
@@ -439,51 +446,18 @@ class SignRecognizer:
     
     def _recognize_sign(self, landmarks: List[Tuple[float, float, float]]) -> SignType:
         """
-        Recognize a sign from hand landmarks using geometric rules.
-        
-        Args:
-            landmarks: List of hand landmarks
-            
-        Returns:
-            Recognized SignType
+        Geometric-rule fallback for sign recognition.
+
+        The geometric helper methods (_is_i_love_you, _is_yes, etc.) were written
+        for the original 10-gesture vocabulary and are NOT tuned for FSL
+        fingerspelling shapes.  This method therefore always returns UNKNOWN so
+        that the caller (process_frame) surfaces the absence of a trained model
+        rather than producing meaningless label guesses.
+
+        When a trained XGBoost model is present, process_frame uses
+        xgboost_classifier.predict_both_hands() and never reaches this method.
         """
-        try:
-            if not landmarks or len(landmarks) < 21:
-                return SignType.UNKNOWN
-            
-            # Check for each sign using geometric rules.
-            # Enum mapping (gesture name → natural language meaning):
-            #   HELLO        → Hello          PEACE_SIGN  → Thank You
-            #   THUMBS_UP    → Yes            THUMBS_DOWN → No
-            #   INDEX_FINGER → Help           OPEN_PALM   → Good Morning / Please
-            #   CLOSED_FIST  → Sorry          GOODBYE     → Goodbye
-            #   I_LOVE_YOU   → I Love You
-            if self._is_i_love_you(landmarks):
-                return SignType.I_LOVE_YOU
-            elif self._is_thumbs_up_or_hello(landmarks):
-                return SignType.HELLO          # Hello (open-hand wave)
-            elif self._is_thank_you(landmarks):
-                return SignType.PEACE_SIGN     # Thank You (all fingers, palm out)
-            elif self._is_yes(landmarks):
-                return SignType.THUMBS_UP      # Yes (thumb up, fist)
-            elif self._is_no(landmarks):
-                return SignType.THUMBS_DOWN    # No (V-shape / downward gesture)
-            elif self._is_help(landmarks):
-                return SignType.INDEX_FINGER   # Help (index pointing)
-            elif self._is_good_morning(landmarks):
-                return SignType.OPEN_PALM      # Good Morning (open palm, hand high)
-            elif self._is_sorry(landmarks):
-                return SignType.CLOSED_FIST    # Sorry (closed fist on chest)
-            elif self._is_please(landmarks):
-                return SignType.OPEN_PALM      # Please (open palm, upward)
-            elif self._is_goodbye(landmarks):
-                return SignType.GOODBYE        # Goodbye (wave at shoulder height)
-            else:
-                return SignType.UNKNOWN
-                
-        except Exception as e:
-            logger.error(f"Error in sign recognition: {e}")
-            return SignType.UNKNOWN
+        return SignType.UNKNOWN
     
     def _is_i_love_you(self, landmarks: List[Tuple[float, float, float]]) -> bool:
         """
