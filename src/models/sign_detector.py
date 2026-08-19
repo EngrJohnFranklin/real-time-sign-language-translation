@@ -2,7 +2,7 @@
 Sign Language Detector using MediaPipe Hand Landmarks.
 
 This module recognizes FSL (Filipino Sign Language) fingerspelling labels —
-the 26-letter alphabet (A-Z) and numbers 0-10 — using a trained XGBoost
+the 26-letter alphabet (A-Z) — using a trained XGBoost
 classifier on 126-element normalized landmark vectors.
 
 The HandGeometryAnalyzer and geometric helper methods are retained for
@@ -30,63 +30,92 @@ try:
 except ImportError:
     try:
         from xgboost_classifier import XGBoostSignClassifier
-    except ImportError:
+    except ImportError as exc:
         XGBoostSignClassifier = None  # type: ignore[assignment,misc]
+        logger.warning(
+            f"XGBoostSignClassifier unavailable — AI-based recognition disabled, "
+            f"geometric-rule fallback will be used (import error: {exc})"
+        )
 
 
 class SignType(Enum):
     """Enumeration of FSL fingerspelling labels.
 
     Contains the 26 letters of the Filipino Sign Language (FSL) alphabet
-    and the numbers 0-10, for a total of 37 entries (36 active + UNKNOWN).
+    and UNKNOWN.
 
-    Recognition for all 36 labels is performed exclusively by the XGBoost
+    Recognition for all 26 letter labels is performed exclusively by the XGBoost
     classifier trained on collected landmark data.  The geometric fallback
     (HandGeometryAnalyzer / _recognize_sign) is structurally kept but is
     not tuned for fingerspelling shapes and returns UNKNOWN when invoked.
     """
     # --- FSL Alphabet (A-Z) ---
-    # TODO: fill in FSL handshape descriptions per letter from your reference image
-    LETTER_A = "A"   # placeholder — see FSL alphabet reference
-    LETTER_B = "B"   # placeholder
-    LETTER_C = "C"   # placeholder
-    LETTER_D = "D"   # placeholder
-    LETTER_E = "E"   # placeholder
-    LETTER_F = "F"   # placeholder
-    LETTER_G = "G"   # placeholder
-    LETTER_H = "H"   # placeholder
-    LETTER_I = "I"   # placeholder
-    LETTER_J = "J"   # placeholder
-    LETTER_K = "K"   # placeholder
-    LETTER_L = "L"   # placeholder
-    LETTER_M = "M"   # placeholder
-    LETTER_N = "N"   # placeholder
-    LETTER_O = "O"   # placeholder
-    LETTER_P = "P"   # placeholder
-    LETTER_Q = "Q"   # placeholder
-    LETTER_R = "R"   # placeholder
-    LETTER_S = "S"   # placeholder
-    LETTER_T = "T"   # placeholder
-    LETTER_U = "U"   # placeholder
-    LETTER_V = "V"   # placeholder
-    LETTER_W = "W"   # placeholder
-    LETTER_X = "X"   # placeholder
-    LETTER_Y = "Y"   # placeholder
-    LETTER_Z = "Z"   # placeholder
-    # --- FSL Numbers (0-10) ---
-    # TODO: fill in FSL handshape descriptions per number from your reference image
-    NUMBER_0  = "0"   # placeholder
-    NUMBER_1  = "1"   # placeholder
-    NUMBER_2  = "2"   # placeholder
-    NUMBER_3  = "3"   # placeholder
-    NUMBER_4  = "4"   # placeholder
-    NUMBER_5  = "5"   # placeholder
-    NUMBER_6  = "6"   # placeholder
-    NUMBER_7  = "7"   # placeholder
-    NUMBER_8  = "8"   # placeholder
-    NUMBER_9  = "9"   # placeholder
-    NUMBER_10 = "10"  # placeholder
+    LETTER_A = "A"
+    LETTER_B = "B"
+    LETTER_C = "C"
+    LETTER_D = "D"
+    LETTER_E = "E"
+    LETTER_F = "F"
+    LETTER_G = "G"
+    LETTER_H = "H"
+    LETTER_I = "I"
+    LETTER_J = "J"
+    LETTER_K = "K"
+    LETTER_L = "L"
+    LETTER_M = "M"
+    LETTER_N = "N"
+    LETTER_O = "O"
+    LETTER_P = "P"
+    LETTER_Q = "Q"
+    LETTER_R = "R"
+    LETTER_S = "S"
+    LETTER_T = "T"
+    LETTER_U = "U"
+    LETTER_V = "V"
+    LETTER_W = "W"
+    LETTER_X = "X"
+    LETTER_Y = "Y"
+    LETTER_Z = "Z"
     UNKNOWN = "Unknown"
+
+
+# PROVISIONAL and UNVERIFIED against an authoritative FSL source.
+# See docs/FSL_REFERENCE.md for the source notes and verification status.
+FSL_ALPHABET_HANDSHAPES: Dict[str, str] = {
+    "A": "Closed fist, thumb resting alongside the side of the fist",
+    "B": "Flat hand, four fingers extended and together pointing up, thumb folded across palm",
+    "C": 'Hand curved into a "C" shape, fingers and thumb curved but not touching',
+    "D": "Index finger extended upward, other fingers curled with thumb touching middle finger",
+    "E": "Fingers curled down, fingertips touching thumb",
+    "F": "Thumb and index finger touching to form a circle, other three fingers extended up",
+    "G": "Index finger and thumb extended, pointing sideways",
+    "H": "Index and middle fingers extended together, pointing sideways",
+    "I": "Pinky finger extended up, other fingers closed in fist",
+    "J": 'Same handshape as "I" (pinky extended)',
+    "K": 'Index and middle fingers extended up in a "V," thumb placed between them',
+    "L": 'Thumb and index finger extended, forming an "L" shape, other fingers closed',
+    "M": "Thumb tucked under index, middle, and ring fingers, which are folded over it",
+    "N": "Thumb tucked under index and middle fingers, which are folded over it",
+    "O": 'Fingers and thumb curved to form an "O" shape',
+    "P": 'Same as "K" handshape, but hand pointed downward',
+    "Q": 'Same as "G" handshape, but hand pointed downward',
+    "R": "Index and middle fingers crossed",
+    "S": "Closed fist, thumb wrapped across the front of the fingers",
+    "T": "Fist closed, thumb tucked between index and middle fingers",
+    "U": "Index and middle fingers extended up together, touching",
+    "V": 'Index and middle fingers extended up in a "V" shape, separated',
+    "W": "Index, middle, and ring fingers extended up, separated",
+    "X": "Index finger extended and hooked/bent, other fingers closed",
+    "Y": "Thumb and pinky extended outward, other fingers closed",
+    "Z": "Index finger extended",
+}
+
+# TODO: Add NUMBER_0 through NUMBER_10 after the Numbers table in
+# docs/FSL_REFERENCE.md has been completed and verified.
+logger.warning(
+    "WARNING: FSL handshape definitions are unverified — "
+    "see docs/FSL_REFERENCE.md"
+)
 
 
 @dataclass
@@ -304,9 +333,15 @@ class SignRecognizer:
     
     def _try_load_xgboost(self) -> None:
         """Load the trained XGBoost classifier if the model file exists."""
-        if XGBoostSignClassifier is None:
-            return
         model_path = pathlib.Path(__file__).parent.parent.parent / "data" / "models" / "sign_model.pkl"
+
+        if XGBoostSignClassifier is None:
+            logger.warning(
+                f"XGBoost classifier module unavailable (see import warning above) — "
+                f"using geometric rules even though {model_path} may exist."
+            )
+            return
+
         if model_path.exists():
             try:
                 self.xgboost_classifier = XGBoostSignClassifier(str(model_path))
@@ -315,7 +350,7 @@ class SignRecognizer:
                 logger.warning(f"Could not load XGBoost model, falling back to geometric rules: {exc}")
         else:
             logger.info(
-                "No trained model found — using geometric rules. "
+                f"No trained model found at {model_path} — using geometric rules. "
                 "Run scripts/collect_training_data.py then scripts/train_xgboost_model.py to train."
             )
 
@@ -771,16 +806,21 @@ if __name__ == "__main__":
     Requires OpenCV to be installed for video capture.
     """
     import cv2
+    from utils.camera_selector import select_camera_index
     
     try:
         # Initialize recognizer
         recognizer = SignRecognizer()
         
-        # Open camera
-        cap = cv2.VideoCapture(0)
+        # Select and open camera
+        camera_index = select_camera_index()
+        if camera_index is None:
+            logger.error("No camera devices detected")
+            exit(1)
+        cap = cv2.VideoCapture(camera_index)
         
         if not cap.isOpened():
-            logger.error("Failed to open camera")
+            logger.error(f"Failed to open camera {camera_index}")
             exit(1)
         
         print("Press 'q' to quit")

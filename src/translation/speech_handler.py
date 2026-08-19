@@ -110,7 +110,7 @@ class VoskSpeechRecognizer:
                 # Try to use provided model path
                 self.model = vosk.Model(self.model_path)
             else:
-                # Select model candidates by language with fallback to default English models.
+                # Select only models for the requested language.
                 model_candidates = self._get_model_candidates_for_language(self.language)
                 model_found = False
 
@@ -161,9 +161,23 @@ class VoskSpeechRecognizer:
         ]
 
         if language == SpeechLanguage.FILIPINO:
-            return filipino_candidates + english_candidates
+            return filipino_candidates
 
         return english_candidates
+
+    @classmethod
+    def is_model_available(
+        cls,
+        language: SpeechLanguage,
+        model_path: Optional[str] = None,
+    ) -> bool:
+        """Return whether a local Vosk model exists for the requested language."""
+        if model_path:
+            return os.path.exists(model_path)
+        return any(
+            os.path.exists(candidate)
+            for candidate in cls._get_model_candidates_for_language(language)
+        )
     
     def _initialize_audio(self):
         """

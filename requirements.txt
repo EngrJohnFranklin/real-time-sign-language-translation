@@ -7,7 +7,7 @@ opencv-python==4.8.1.78
 # OpenCV: Real-time video capture, frame processing, image manipulation, 
 # and computer vision operations for camera input handling
 
-mediapipe==0.10.0
+mediapipe==0.10.20
 # MediaPipe: Pre-built hand pose estimation, gesture recognition, and 
 # pose detection for accurate sign language gesture capture
 
@@ -20,6 +20,9 @@ customtkinter==5.2.0
 vosk==0.3.32
 # Vosk: Lightweight offline speech recognition engine for voice input,
 # enables bidirectional translation from speech to sign language
+
+pyaudio>=0.2.14
+# PyAudio: Audio input/output bindings required for microphone speech recognition
 
 pyttsx3==2.90
 # pyttsx3: Offline text-to-speech synthesis for accessible audio output,

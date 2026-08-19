@@ -34,6 +34,7 @@ import sys
 import os
 import csv
 import pathlib
+import argparse
 import time
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -50,6 +51,7 @@ _PROJECT_ROOT = _SCRIPT_DIR.parent
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
 from models.sign_detector import SignType  # noqa: E402
+from utils.camera_selector import detect_available_cameras, select_camera_index  # noqa: E402
 
 # --- Configuration ---
 SIGNS = [s.value for s in SignType if s != SignType.UNKNOWN]
@@ -368,6 +370,59 @@ class FrameRateCounter:
         return fps
 
 
+def dry_run() -> bool:
+    """
+    Validate setup without capturing data.
+    
+    Checks:
+    - SignType imports and contains 26 letters (no numbers)
+    - FSL_ALPHABET_HANDSHAPES is available
+    - CSV output directory exists and is writable
+    - Webcam 0 can be opened (but closes immediately)
+    
+    Returns:
+        True if all checks pass, False otherwise.
+    """
+    print("\n=== Dry-Run Validation ===\n")
+    
+    # Check 1: SignType and label consistency
+    try:
+        signs = [s.value for s in SignType if s != SignType.UNKNOWN]
+        num_count = sum(1 for s in SignType if s.name.startswith("NUMBER_"))
+        print(f"✓ SignType imported successfully")
+        print(f"  Letters: {len(signs)} (expected 26)")
+        print(f"  Number members: {num_count} (expected 0)")
+        assert len(signs) == 26, f"Expected 26 letters, got {len(signs)}"
+        assert num_count == 0, f"Expected 0 number members, got {num_count}"
+    except Exception as e:
+        print(f"✗ SignType validation failed: {e}")
+        return False
+    
+    # Check 2: CSV output directory
+    try:
+        OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        print(f"✓ CSV output directory is writable: {OUTPUT_PATH.parent}")
+    except Exception as e:
+        print(f"✗ CSV output directory check failed: {e}")
+        return False
+    
+    # Check 3: Webcam availability
+    try:
+        available = detect_available_cameras()
+        if not available:
+            print(f"✗ No webcam devices detected")
+            return False
+        print(f"✓ Webcam device(s) available: {available}")
+    except Exception as e:
+        print(f"✗ Webcam check failed: {e}")
+        return False
+    
+    print("\n✓ All validation checks passed!")
+    print("  Ready to start data collection:")
+    print("  python scripts/collect_training_data.py\n")
+    return True
+
+
 def _count_existing_samples(path: pathlib.Path) -> int:
     """Return the number of data rows in the CSV (excluding header)."""
     if not path.exists():
@@ -402,9 +457,13 @@ def main() -> None:
     )
     drawing_utils = mp.solutions.drawing_utils
 
-    cap = cv2.VideoCapture(0)
+    camera_index = select_camera_index()
+    if camera_index is None:
+        print("Error: No camera devices detected.")
+        return
+    cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
-        print("Error: Cannot open webcam.")
+        print(f"Error: Cannot open camera {camera_index}.")
         return
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -633,4 +692,18 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Collect FSL handshape training data from webcam"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate setup without capturing data"
+    )
+    args = parser.parse_args()
+    
+    if args.dry_run:
+        import sys
+        sys.exit(0 if dry_run() else 1)
+    else:
+        main()

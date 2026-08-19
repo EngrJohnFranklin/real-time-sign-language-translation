@@ -25,7 +25,9 @@ Thumbs.db
 
 # Project-specific
 data/models/*
+!data/models/.gitkeep
 data/training_data/*
+!data/training_data/.gitkeep
 logs/
 *.db
 .env

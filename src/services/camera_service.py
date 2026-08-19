@@ -23,6 +23,7 @@ import cv2
 import numpy as np
 
 from models.sign_detector import SignRecognizer, SignResult
+from utils.camera_selector import select_camera_index
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +55,9 @@ class CameraService:
     _FRAME_HEIGHT = 480
     _TARGET_FPS = 30
 
-    def __init__(self, sign_recognizer: SignRecognizer) -> None:
+    def __init__(self, sign_recognizer: SignRecognizer, parent=None) -> None:
         self._sign_recognizer = sign_recognizer
+        self._parent = parent
         self._camera: Optional[cv2.VideoCapture] = None
         self._thread: Optional[threading.Thread] = None
         self._thread_lock = threading.Lock()
@@ -86,9 +88,14 @@ class CameraService:
             return False
 
         try:
-            self._camera = cv2.VideoCapture(0)
+            camera_index = select_camera_index(parent=self._parent)
+            if camera_index is None:
+                logger.error("No camera devices detected")
+                return False
+
+            self._camera = cv2.VideoCapture(camera_index)
             if not self._camera.isOpened():
-                logger.error("Cannot open camera device 0")
+                logger.error(f"Cannot open camera device {camera_index}")
                 return False
 
             self._camera.set(cv2.CAP_PROP_FRAME_WIDTH, self._FRAME_WIDTH)

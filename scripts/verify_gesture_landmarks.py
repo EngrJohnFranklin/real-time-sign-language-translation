@@ -27,192 +27,44 @@ _PROJECT_ROOT = _SCRIPT_DIR.parent
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
 from models.sign_detector import SignType
+from utils.camera_selector import select_camera_index
 
 
-# Expected landmark patterns for each gesture (normalized, wrist at origin)
-# Relative positions of key landmarks for each gesture
-GESTURE_LANDMARKS = {
-    "Closed Fist": {
-        "description": "All fingers curled inward - most compact shape",
-        "key_features": [
-            "All fingertips close to wrist (tight cluster)",
-            "No fingers extended",
-            "Thumb tucked or resting on hand",
-        ],
-        "tip_positions": {
-            "thumb": "Near wrist (low spread)",
-            "index": "Near wrist (low spread)",
-            "middle": "Near wrist (low spread)",
-            "ring": "Near wrist (low spread)",
-            "pinky": "Near wrist (low spread)",
-        },
-        "difficulty": 1,
-        "hint": "Make a tight fist",
-    },
+# Build FSL alphabet gesture reference from SignType
+# Import the PROVISIONAL handshape descriptions (see docs/FSL_REFERENCE.md)
+try:
+    from models.sign_detector import FSL_ALPHABET_HANDSHAPES
+except ImportError:
+    FSL_ALPHABET_HANDSHAPES = {}
+
+
+def build_gesture_landmarks():
+    """Build the gesture reference from SignType enum and FSL handshapes."""
+    gestures = {}
+    for sign in SignType:
+        if sign == SignType.UNKNOWN:
+            continue
+        
+        label = sign.value
+        description = FSL_ALPHABET_HANDSHAPES.get(label, "No description available")
+        
+        gestures[label] = {
+            "description": description,
+            "key_features": [
+                "Refer to docs/FSL_REFERENCE.md for verified details",
+                "Handshape definitions are PROVISIONAL and UNVERIFIED",
+            ],
+            "tip_positions": {
+                "note": "Specific finger positions depend on the handshape",
+            },
+            "difficulty": 1,
+            "hint": f"Form the FSL letter '{label}' handshape",
+        }
     
-    "Open Palm": {
-        "description": "All fingers fully extended and spread",
-        "key_features": [
-            "All 5 fingertips far from wrist",
-            "Maximum spread between fingers",
-            "Palm flat and facing camera",
-        ],
-        "tip_positions": {
-            "thumb": "Far right (extended)",
-            "index": "Far forward (extended)",
-            "middle": "Far forward (extended)",
-            "ring": "Far forward (extended)",
-            "pinky": "Far left (extended)",
-        },
-        "difficulty": 1,
-        "hint": "Spread your hand wide like a stop sign",
-    },
-    
-    "Thumbs Up": {
-        "description": "Thumb pointing upward, other fingers closed",
-        "key_features": [
-            "Thumb tip highest among all fingers",
-            "Other 4 fingers clustered at base",
-            "Creates clear vertical line from thumb",
-        ],
-        "tip_positions": {
-            "thumb": "HIGH (extended upward)",
-            "index": "LOW (clustered)",
-            "middle": "LOW (clustered)",
-            "ring": "LOW (clustered)",
-            "pinky": "LOW (clustered)",
-        },
-        "difficulty": 1,
-        "hint": "Point your thumb straight up",
-    },
-    
-    "Thumbs Down": {
-        "description": "Thumb pointing downward, other fingers closed",
-        "key_features": [
-            "Thumb tip lowest among all fingers",
-            "Other 4 fingers clustered at top",
-            "Mirror image of Thumbs Up",
-        ],
-        "tip_positions": {
-            "thumb": "LOW (extended downward)",
-            "index": "HIGH (clustered)",
-            "middle": "HIGH (clustered)",
-            "ring": "HIGH (clustered)",
-            "pinky": "HIGH (clustered)",
-        },
-        "difficulty": 1,
-        "hint": "Point your thumb straight down",
-    },
-    
-    "Index Finger": {
-        "description": "Index finger up, all others closed",
-        "key_features": [
-            "Index finger tip highest",
-            "Thumb NOT extended (distinguish from Thumbs Up)",
-            "Other fingers clustered with thumb",
-        ],
-        "tip_positions": {
-            "thumb": "LOW (clustered, NOT extended)",
-            "index": "HIGH (extended upward)",
-            "middle": "LOW (clustered)",
-            "ring": "LOW (clustered)",
-            "pinky": "LOW (clustered)",
-        },
-        "difficulty": 2,
-        "hint": "Point your index finger up (keep thumb relaxed)",
-    },
-    
-    "Peace Sign": {
-        "description": "Index and middle fingers extended with gap",
-        "key_features": [
-            "Index and middle fingers extended upward",
-            "Clear gap/separation between index and middle",
-            "Ring and pinky clustered together",
-            "Thumb may be slightly extended",
-        ],
-        "tip_positions": {
-            "thumb": "MEDIUM (partially extended or relaxed)",
-            "index": "HIGH (extended)",
-            "middle": "HIGH (extended)",
-            "ring": "LOW (clustered)",
-            "pinky": "LOW (clustered)",
-        },
-        "difficulty": 2,
-        "hint": "Make a 'V' with your index and middle fingers",
-    },
-    
-    "OK Sign": {
-        "description": "Thumb and index forming circle, other 3 extended",
-        "key_features": [
-            "Thumb and index tips very close (circle)",
-            "Middle, ring, pinky extended upward",
-            "Clear separation of the circle from other fingers",
-        ],
-        "tip_positions": {
-            "thumb": "CLOSE to index (forming circle)",
-            "index": "CLOSE to thumb (forming circle)",
-            "middle": "HIGH (extended)",
-            "ring": "HIGH (extended)",
-            "pinky": "HIGH (extended)",
-        },
-        "difficulty": 3,
-        "hint": "Make a circle with thumb and index, extend other 3 fingers",
-    },
-    
-    "I Love You": {
-        "description": "Thumb, index, pinky extended; middle and ring folded",
-        "key_features": [
-            "Thumb, index, and pinky extended",
-            "Middle and ring fingers folded/closed",
-            "Creates distinctive three-point pattern",
-        ],
-        "tip_positions": {
-            "thumb": "Extended (side position)",
-            "index": "HIGH (extended)",
-            "middle": "LOW (folded - key feature)",
-            "ring": "LOW (folded - key feature)",
-            "pinky": "Extended (side position)",
-        },
-        "difficulty": 2,
-        "hint": "Index up, middle and ring down, thumb and pinky out",
-    },
-    
-    "Hello": {
-        "description": "Thumb and pinky extended, middle three closed",
-        "key_features": [
-            "Thumb and pinky extended (non-adjacent)",
-            "Index, middle, ring fingers closed together",
-            "Creates 'hang loose' shape",
-        ],
-        "tip_positions": {
-            "thumb": "Extended (one side)",
-            "index": "LOW (clustered)",
-            "middle": "LOW (clustered)",
-            "ring": "LOW (clustered)",
-            "pinky": "Extended (other side)",
-        },
-        "difficulty": 2,
-        "hint": "Extend your thumb and pinky, close the middle three",
-    },
-    
-    "Goodbye": {
-        "description": "All 5 fingers extended with gap between middle and ring",
-        "key_features": [
-            "All five fingers extended",
-            "Distinctive gap between middle and ring finger",
-            "Gap is the defining feature (critical!)",
-        ],
-        "tip_positions": {
-            "thumb": "Extended",
-            "index": "Extended",
-            "middle": "Extended (gap on right side)",
-            "ring": "Extended (gap on left side)",
-            "pinky": "Extended",
-        },
-        "difficulty": 3,
-        "hint": "Extend all fingers with a gap between middle and ring",
-    },
-}
+    return gestures
+
+
+GESTURE_LANDMARKS = build_gesture_landmarks()
 
 
 def draw_gesture_info(frame: np.ndarray, gesture_name: str, gesture_idx: int, total_gestures: int) -> np.ndarray:
@@ -306,9 +158,13 @@ def draw_gesture_details(frame: np.ndarray, gesture_name: str) -> np.ndarray:
 
 def main():
     """Main loop for gesture verification."""
-    cap = cv2.VideoCapture(0)
+    camera_index = select_camera_index()
+    if camera_index is None:
+        print("Error: No camera devices detected")
+        return
+    cap = cv2.VideoCapture(camera_index)
     if not cap.isOpened():
-        print("Error: Cannot open webcam")
+        print(f"Error: Cannot open camera {camera_index}")
         return
     
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 800)

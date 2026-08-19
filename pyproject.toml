@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sign-language-translation"
-version = "0.1.0"
+version = "1.0.0"
 description = "Real-time bidirectional sign language translation system"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -14,8 +14,7 @@ authors = [
 ]
 keywords = ["sign-language", "translation", "computer-vision", "real-time"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Environment :: X11 Applications :: Qt",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
@@ -27,16 +26,18 @@ classifiers = [
 
 dependencies = [
     "opencv-python>=4.8.0",
-    "numpy>=1.24.0",
-    "pillow>=9.5.0",
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
-    "PyQt6>=6.5.0",
+    "mediapipe>=0.10.0",
+    "customtkinter>=5.2.0",
+    "vosk>=0.3.32",
+    "pyaudio>=0.2.14",
+    "xgboost>=2.0.0",
+    "scikit-learn>=1.3.0",
     "pyttsx3>=2.90",
-    "pandas>=1.5.0",
-    "sqlalchemy>=2.0.0",
-    "pyyaml>=6.0",
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
     "python-dotenv>=1.0.0",
+    "PyYAML>=6.0.0",
+    "tqdm>=4.66.0",
 ]
 
 [project.optional-dependencies]

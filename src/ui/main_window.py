@@ -43,7 +43,11 @@ if _src_dir not in sys.path:
 
 from app.app_state import AppState
 from models.sign_detector import SignRecognizer
-from translation.speech_handler import SpeechHandler, SpeechLanguage
+from translation.speech_handler import (
+    SpeechHandler,
+    SpeechLanguage,
+    VoskSpeechRecognizer,
+)
 from translation.sign_to_text import SignToTextConverter
 from services.camera_service import CameraService
 from services.recognition_service import RecognitionService
@@ -110,6 +114,7 @@ class MainWindow(ctk.CTk):
             self._init_controllers()
             self._build_layout()
             self._init_video_player()
+            self._warn_if_filipino_model_unavailable()
             self.protocol("WM_DELETE_WINDOW", self._on_window_close)
             logger.info("MainWindow initialised successfully")
         except Exception:
@@ -131,7 +136,7 @@ class MainWindow(ctk.CTk):
         )
         self._sign_to_text = SignToTextConverter()
 
-        self._camera_svc = CameraService(self._sign_recognizer)
+        self._camera_svc = CameraService(self._sign_recognizer, parent=self)
         self._recognition_svc = RecognitionService()
         self._speech_svc = SpeechService(self._speech_handler)
         # VideoService is wired after the panel is created (_init_video_player)
@@ -179,6 +184,14 @@ class MainWindow(ctk.CTk):
             logger.info("VideoPlayerPanel initialised: %s", video_folder)
         except Exception:
             logger.exception("Could not initialise VideoPlayerPanel")
+
+    def _warn_if_filipino_model_unavailable(self) -> None:
+        """Show a visible warning when local Filipino speech recognition is unavailable."""
+        if not VoskSpeechRecognizer.is_model_available(SpeechLanguage.FILIPINO):
+            self.update_status(
+                "Warning: Filipino recognition is unavailable until a Filipino "
+                "Vosk model is installed."
+            )
 
     @staticmethod
     def _find_video_folder() -> str:

@@ -58,13 +58,8 @@ def analyze_dataset(csv_path: pathlib.Path):
     print(f"Total samples: {total_samples}")
     print(f"Unique gestures: {len(gesture_counts)}")
     
-    # Expected labels: FSL alphabet A-Z plus numbers 0-10
-    expected_gestures = {
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J",
-        "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
-        "U", "V", "W", "X", "Y", "Z",
-        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-    }
+    # Expected labels: FSL alphabet A-Z (26 letters only, numbers out of scope)
+    expected_gestures = {s.value for s in SignType if s != SignType.UNKNOWN}
     
     missing_gestures = expected_gestures - set(gesture_counts.keys())
     extra_gestures = set(gesture_counts.keys()) - expected_gestures
@@ -116,7 +111,7 @@ def analyze_dataset(csv_path: pathlib.Path):
         all_issues.append((1, f"❌ Missing gestures: {len(missing_gestures)}",
                           f"Missing: {', '.join(sorted(missing_gestures))}"))
     else:
-        print(f"✓ All expected labels present (37/37)")
+        print(f"✓ All expected labels present ({len(expected_gestures)}/{len(expected_gestures)})")
     
     # Check 3: Balance
     if gesture_counts:
@@ -195,10 +190,10 @@ def analyze_dataset(csv_path: pathlib.Path):
     elif total_samples >= 50:
         readiness_score += 10
     
-    # Completeness (30 points) — 37 total labels (A-Z + 0-10)
+    # Completeness (30 points) — 26 total labels (A-Z only)
     if len(gesture_counts) == len(expected_gestures):
         readiness_score += 30
-    elif len(gesture_counts) >= 30:
+    elif len(gesture_counts) >= 24:
         readiness_score += 20
     elif len(gesture_counts) >= 20:
         readiness_score += 10

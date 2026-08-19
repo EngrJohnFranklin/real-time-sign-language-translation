@@ -9,7 +9,7 @@ camera:
 model:
   name: "sign_language_model_v1"
   confidence_threshold: 0.7
-  device: "gpu"  # or "cpu"
+  device: "cpu"
 
 # UI settings
 ui:

@@ -287,8 +287,9 @@ real-time-sign-language-translation/
 │   ├── models/                   # Pre-trained models
 │   └── training_data/
 │
-├── models/                       # Vosk speech models (create this)
-│   └── vosk-model-en-us-0.42/    # Downloaded Vosk model
+├── model/                        # Bundled US English Vosk model
+├── model-tl/                     # Place Filipino/Tagalog Vosk model here manually
+│   └── vosk-model-tl-ph-generic-0.6/
 │
 ├── videos/                       # Sign language demo videos (create this)
 │   ├── hello.mp4
