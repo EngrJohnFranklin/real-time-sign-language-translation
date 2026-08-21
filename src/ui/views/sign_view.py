@@ -48,7 +48,7 @@ class SignView(ctk.CTkFrame):
         letter_card = ctk.CTkFrame(right, fg_color=COLOR_CARD, corner_radius=CORNER)
         letter_card.pack(fill="x", pady=(0, PAD_CARD))
         ctk.CTkLabel(
-            letter_card, text="Recognized Letter",
+            letter_card, text="Recognized Sign",
             font=FONT_SECTION, text_color=COLOR_ACCENT,
         ).pack(pady=(PAD_CARD, 6))
         self._translation_display = ctk.CTkLabel(

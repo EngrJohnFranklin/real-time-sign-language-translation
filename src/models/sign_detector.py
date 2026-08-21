@@ -38,6 +38,7 @@ except ImportError:
         )
 
 from utils.paths import get_model_path
+from utils.landmark_normalizer import normalize_dual_hand_features
 
 
 class SignType(Enum):
@@ -380,9 +381,11 @@ class SignRecognizer:
         # Geometric rule fallback — confidence is not meaningful so use 0.8
         return self._recognize_sign(landmarks), 0.8
 
-    def process_frame(self, frame: np.ndarray) -> Tuple[Optional[SignResult], Optional[SignResult]]:
+    def process_frame_with_features(
+        self, frame: np.ndarray, enable_letter_recognition: bool = True
+    ) -> Tuple[Optional[SignResult], Optional[SignResult], Optional[np.ndarray]]:
         """
-        Process a frame and recognize signs in both hands.
+        Process a frame and return normalized word features with optional letters.
         
         Supports detection of up to 2 hands. Uses a unified 126-element feature vector
         (left hand + right hand) for classification, allowing the model to learn patterns
@@ -392,19 +395,20 @@ class SignRecognizer:
             frame: Input frame from video capture (BGR format)
             
         Returns:
-            Tuple of (left_hand_result, right_hand_result). Each can be None if hand not detected.
+            Tuple of (left_hand_result, right_hand_result, features). Features are
+            None when no hands are detected; otherwise they have shape (126,).
         """
         try:
             if frame is None or frame.size == 0:
                 logger.warning("Empty frame received")
-                return None, None
+                return None, None, None
             
             # Convert BGR to RGB for MediaPipe
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = self.hands.process(rgb_frame)
             
             if not results.multi_hand_landmarks or not results.multi_handedness:
-                return None, None
+                return None, None, None
             
             # Extract landmarks by handedness: left and right
             left_landmarks = None
@@ -422,10 +426,28 @@ class SignRecognizer:
                 else:
                     left_landmarks = landmark_list
             
-            # Classify using both hands (or one + padding)
             left_result = None
             right_result = None
-            
+
+            if not enable_letter_recognition:
+                features = normalize_dual_hand_features(left_landmarks, right_landmarks)
+                if left_landmarks is not None:
+                    left_result = SignResult(
+                        sign_type=SignType.UNKNOWN,
+                        confidence=0.0,
+                        hand_side="Left",
+                        landmarks=left_landmarks,
+                    )
+                if right_landmarks is not None:
+                    right_result = SignResult(
+                        sign_type=SignType.UNKNOWN,
+                        confidence=0.0,
+                        hand_side="Right",
+                        landmarks=right_landmarks,
+                    )
+                return left_result, right_result, features
+
+            # Classify using both hands (or one + padding)
             if self.xgboost_classifier is not None:
                 # Use the unified 126-element classifier
                 recognized_sign, confidence = self.xgboost_classifier.predict_both_hands(
@@ -475,11 +497,19 @@ class SignRecognizer:
                         landmarks=right_landmarks
                     )
             
-            return left_result, right_result
+            features = normalize_dual_hand_features(left_landmarks, right_landmarks)
+            return left_result, right_result, features
             
         except Exception as e:
             logger.error(f"Error processing frame: {e}")
-            return None, None
+            return None, None, None
+
+    def process_frame(
+        self, frame: np.ndarray
+    ) -> Tuple[Optional[SignResult], Optional[SignResult]]:
+        """Backward-compatible letter-recognition interface."""
+        left_result, right_result, _ = self.process_frame_with_features(frame)
+        return left_result, right_result
     
     def _recognize_sign(self, landmarks: List[Tuple[float, float, float]]) -> SignType:
         """

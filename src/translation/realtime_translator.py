@@ -33,6 +33,19 @@ GESTURE_TO_MEANING = {
     "Unknown": "",
 }
 
+WORD_TO_MEANING = {
+    "hello": "Hello",
+    "thank_you": "Thank You",
+    "sorry": "Sorry",
+    "yes": "Yes",
+    "stop": "Stop",
+    "please": "Please",
+    "good": "Good",
+    "love": "Love",
+    "help": "Help",
+    "i_love_you": "I Love You",
+}
+
 
 def _gesture_to_meaning(gesture_name: str) -> str:
     """
@@ -43,6 +56,8 @@ def _gesture_to_meaning(gesture_name: str) -> str:
     """
     if len(gesture_name) == 1 and gesture_name.isalpha() and gesture_name.isupper():
         return gesture_name  # FSL fingerspelling: the letter is the text
+    if gesture_name in WORD_TO_MEANING:
+        return WORD_TO_MEANING[gesture_name]
     return GESTURE_TO_MEANING.get(gesture_name, "")
 
 

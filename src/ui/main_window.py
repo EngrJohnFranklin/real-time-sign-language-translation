@@ -40,6 +40,7 @@ if _src_dir not in sys.path:
 
 from app.app_state import AppState
 from models.sign_detector import SignRecognizer
+from models.word_recognizer import WordRecognizer
 from translation.speech_handler import (
     SpeechHandler,
     SpeechLanguage,
@@ -53,8 +54,12 @@ from services.video_service import VideoService
 from controllers.camera_controller import CameraController
 from controllers.speech_controller import SpeechController
 from controllers.sign_controller import SignController
+from utils.paths import get_model_path
 
 logger = logging.getLogger(__name__)
+
+# Set True to restore live letter recognition and letter fallback callbacks.
+ENABLE_LETTER_RECOGNITION = False
 
 
 class MainWindow(ctk.CTk):
@@ -78,6 +83,7 @@ class MainWindow(ctk.CTk):
 
         # --- Domain services (infrastructure) ---
         self._sign_recognizer: SignRecognizer
+        self._word_recognizer: WordRecognizer
         self._speech_handler: SpeechHandler
         self._sign_to_text: SignToTextConverter
 
@@ -116,6 +122,10 @@ class MainWindow(ctk.CTk):
         """Instantiate all domain and application services."""
         logger.info("Initialising domain services…")
         self._sign_recognizer = SignRecognizer()
+        word_model_path = get_model_path("word_model.pkl")
+        self._word_recognizer = WordRecognizer(
+            str(word_model_path) if word_model_path.exists() else None
+        )
         self._speech_handler = SpeechHandler(
             language=SpeechLanguage.ENGLISH,
             tts_rate=150,
@@ -123,7 +133,11 @@ class MainWindow(ctk.CTk):
         )
         self._sign_to_text = SignToTextConverter()
 
-        self._camera_svc = CameraService(self._sign_recognizer, parent=self)
+        self._camera_svc = CameraService(
+            self._sign_recognizer,
+            parent=self,
+            enable_letter_recognition=ENABLE_LETTER_RECOGNITION,
+        )
         self._recognition_svc = RecognitionService()
         self._speech_svc = SpeechService(self._speech_handler)
         self._video_svc = VideoService(None)  # kept for SpeechController compatibility
@@ -140,6 +154,7 @@ class MainWindow(ctk.CTk):
             self._state,
             self,
             sign_recognized_callback=self._sign_ctrl.on_sign_recognized,
+            word_recognizer=self._word_recognizer,
         )
         self._speech_ctrl = SpeechController(
             self._speech_svc, self._video_svc, self._state, self

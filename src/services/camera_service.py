@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Type alias for the per-frame callback signature.
 FrameCallback = Callable[
-    [np.ndarray, Optional[SignResult], Optional[SignResult]], None
+    [np.ndarray, Optional[SignResult], Optional[SignResult], Optional[np.ndarray]], None
 ]
 
 
@@ -55,9 +55,15 @@ class CameraService:
     _FRAME_HEIGHT = 480
     _TARGET_FPS = 30
 
-    def __init__(self, sign_recognizer: SignRecognizer, parent=None) -> None:
+    def __init__(
+        self,
+        sign_recognizer: SignRecognizer,
+        parent=None,
+        enable_letter_recognition: bool = True,
+    ) -> None:
         self._sign_recognizer = sign_recognizer
         self._parent = parent
+        self._enable_letter_recognition = enable_letter_recognition
         self._camera: Optional[cv2.VideoCapture] = None
         self._thread: Optional[threading.Thread] = None
         self._thread_lock = threading.Lock()
@@ -155,10 +161,17 @@ class CameraService:
                     frame = cv2.flip(frame, 1)
 
                     # Run hand detection + sign classification.
-                    left_result, right_result = self._sign_recognizer.process_frame(frame)
+                    left_result, right_result, features = (
+                        self._sign_recognizer.process_frame_with_features(
+                            frame,
+                            enable_letter_recognition=self._enable_letter_recognition,
+                        )
+                    )
 
                     if self._frame_callback:
-                        self._frame_callback(frame, left_result, right_result)
+                        self._frame_callback(
+                            frame, left_result, right_result, features
+                        )
 
                 except Exception:
                     logger.exception("Error inside camera capture loop — continuing")
