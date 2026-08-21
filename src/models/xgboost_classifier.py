@@ -15,11 +15,12 @@ import numpy as np
 from typing import Optional, Tuple, List
 
 from utils.landmark_normalizer import normalize_landmarks, normalize_dual_hand_features
+from utils.paths import get_model_path
 
 logger = logging.getLogger(__name__)
 
-# Default model location relative to this file (src/models/ → project root)
-_DEFAULT_MODEL_PATH = pathlib.Path(__file__).parent.parent.parent / "data" / "models" / "sign_model.pkl"
+# Default model location resolved from the project root (marker-based)
+_DEFAULT_MODEL_PATH = get_model_path()
 
 # Feature dimensions
 FEATURES_PER_HAND = 63

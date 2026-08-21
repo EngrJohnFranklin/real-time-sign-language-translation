@@ -33,6 +33,19 @@ GESTURE_TO_MEANING = {
     "Unknown": "",
 }
 
+
+def _gesture_to_meaning(gesture_name: str) -> str:
+    """
+    Map a gesture to its display text.
+
+    FSL fingerspelling letters (single uppercase A-Z) display as themselves.
+    Legacy word gestures use the GESTURE_TO_MEANING table.
+    """
+    if len(gesture_name) == 1 and gesture_name.isalpha() and gesture_name.isupper():
+        return gesture_name  # FSL fingerspelling: the letter is the text
+    return GESTURE_TO_MEANING.get(gesture_name, "")
+
+
 # Timeout in seconds after which display is cleared if no new sign is detected
 DISPLAY_TIMEOUT = 3.0
 
@@ -98,10 +111,10 @@ class RealTimeTranslator:
             self.sign_spoken = False  # Reset TTS flag for new sign
             
             # Convert to natural language meaning
-            self.current_sign = GESTURE_TO_MEANING.get(gesture_name, "")
+            self.current_sign = _gesture_to_meaning(gesture_name)
             
             logger.info(
-                f"New sign detected: {gesture_name} → {self.current_sign} "
+                f"New sign detected: {gesture_name} -> {self.current_sign} "
                 f"({hand_side}, confidence: {confidence:.2f})"
             )
             

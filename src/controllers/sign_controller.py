@@ -91,7 +91,7 @@ class SignController:
             self._view.update_translation(display_text)
             
             logger.info(
-                f"Sign updated: {sign_name} → '{display_text}' "
+                f"Sign updated: {sign_name} -> '{display_text}' "
                 f"({hand_side}, {confidence:.0%})"
             )
             
@@ -104,6 +104,16 @@ class SignController:
 
         except Exception:
             logger.exception("SignController.on_sign_recognized error for '%s'", sign_name)
+
+    def reset(self) -> None:
+        """Cancel any pending timeout and clear the translator state (used on mode exit)."""
+        if self._timeout_task_id:
+            try:
+                self._view.after_cancel(self._timeout_task_id)
+            except (Exception, AttributeError):
+                logger.debug("Could not cancel timeout task during reset")
+            self._timeout_task_id = None
+        self._translator.clear()
 
     # ------------------------------------------------------------------ #
     # Internal helpers                                                     #

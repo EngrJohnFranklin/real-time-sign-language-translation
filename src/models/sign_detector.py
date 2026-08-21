@@ -37,6 +37,8 @@ except ImportError:
             f"geometric-rule fallback will be used (import error: {exc})"
         )
 
+from utils.paths import get_model_path
+
 
 class SignType(Enum):
     """Enumeration of FSL fingerspelling labels.
@@ -333,7 +335,7 @@ class SignRecognizer:
     
     def _try_load_xgboost(self) -> None:
         """Load the trained XGBoost classifier if the model file exists."""
-        model_path = pathlib.Path(__file__).parent.parent.parent / "data" / "models" / "sign_model.pkl"
+        model_path = get_model_path()
 
         if XGBoostSignClassifier is None:
             logger.warning(

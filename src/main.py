@@ -42,7 +42,7 @@ def _setup_logging():
         logger.setLevel(logging.DEBUG)
         
         # File handler (DEBUG level)
-        file_handler = logging.FileHandler(log_file)
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_format = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
@@ -58,6 +58,11 @@ def _setup_logging():
             datefmt='%H:%M:%S'
         )
         console_handler.setFormatter(console_format)
+        # Reconfigure stdout to UTF-8 so symbols like '→' don't raise on cp1252 consoles.
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
         logger.addHandler(console_handler)
         
         logger.info("Logging configured successfully")

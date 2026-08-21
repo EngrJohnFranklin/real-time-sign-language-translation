@@ -160,7 +160,7 @@ class CameraPanel(ctk.CTkFrame):
 
     def _build_ui(self) -> None:
         title = ctk.CTkLabel(
-            self, text="📷 Live Camera Feed", font=("Arial", 16, "bold")
+            self, text="Live Camera Feed", font=("Arial", 16, "bold")
         )
         title.pack(pady=10)
 
