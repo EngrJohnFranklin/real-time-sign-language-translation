@@ -1,7 +1,7 @@
 """Single-frame XGBoost classifier for static PSL words.
 
 Separate from the letter-recognition XGBoost model. Handles classification
-of static or nearly-static words (love, i_love_you, stop) using a single
+of static or nearly-static words using a single
 126-dimensional normalized dual-hand feature vector.
 
 Model is trained on single frames from word template recordings.
@@ -19,6 +19,8 @@ from utils.landmark_normalizer import normalize_dual_hand_features
 from utils.paths import get_model_path
 
 logger = logging.getLogger(__name__)
+
+DEBUG_WORD_CLASSIFIER = False
 
 # Default model location
 _PROJECT_ROOT = pathlib.Path(__file__).parent.parent.parent
@@ -93,6 +95,14 @@ class XGBoostWordClassifier:
             best_idx = int(np.argmax(proba))
             confidence = float(proba[best_idx])
             label: str = self.label_encoder.inverse_transform([best_idx])[0]
+            if DEBUG_WORD_CLASSIFIER:
+                probabilities = dict(zip(self.label_encoder.classes_, proba))
+                logger.info(
+                    "Static word frame: predicted=%s probability=%.4f probabilities=%s",
+                    label,
+                    confidence,
+                    probabilities,
+                )
             return label, confidence
         except Exception as exc:
             logger.error(f"Word classification error: {exc}")

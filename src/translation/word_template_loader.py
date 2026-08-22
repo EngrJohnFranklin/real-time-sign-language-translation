@@ -20,15 +20,13 @@ logger = logging.getLogger(__name__)
 WORD_TEMPLATES_DIR = get_project_root() / "data" / "word_templates"
 
 WORD_CLASSES = [
-    "hello", "thank_you", "sorry", "yes", "stop",
-    "please", "good", "love", "help", "i_love_you"
+    "love", "i_love_you", "thank_you", "quiet", "no",
+    "hello", "sorry", "yes", "me", "good"
 ]
 
-MOTION_BASED_WORDS = {
-    "hello", "thank_you", "sorry", "yes", "please", "good", "help"
-}
+MOTION_BASED_WORDS = set()
 
-STATIC_WORDS = {"love", "i_love_you", "stop"}
+STATIC_WORDS = set(WORD_CLASSES)
 
 # Initial recordings with short/long duration outliers. Keep them on disk for
 # auditability, but exclude them from the initial recognition template set.

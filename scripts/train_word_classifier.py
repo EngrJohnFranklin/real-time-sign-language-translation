@@ -1,7 +1,7 @@
 """Train the separate static-word classifier from word template frames.
 
-Only ``love``, ``i_love_you``, and ``stop`` are used. Validation groups all
-frames from the same recording together to avoid sequence-frame leakage.
+The configured static vocabulary is used. Validation groups all frames from
+the same recording together to avoid sequence-frame leakage.
 """
 
 import logging

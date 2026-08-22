@@ -9,3 +9,4 @@
 {"word": "yes", "sample_index": 9, "num_frames": 218, "motion_based": true, "timestamp": "2026-08-21T17:29:41.264909", "camera_index": 1, "notes": ""}
 {"word": "yes", "sample_index": 10, "num_frames": 228, "motion_based": true, "timestamp": "2026-08-21T17:30:28.576780", "camera_index": 1, "notes": ""}
 {"word": "yes", "sample_index": 11, "num_frames": 137, "motion_based": true, "timestamp": "2026-08-21T17:30:45.394001", "camera_index": 1, "notes": ""}
+{"word": "yes", "sample_index": 12, "num_frames": 212, "motion_based": false, "timestamp": "2026-08-22T07:53:30.281875", "camera_index": 1, "notes": ""}

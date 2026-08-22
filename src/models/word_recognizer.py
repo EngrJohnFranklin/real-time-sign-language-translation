@@ -1,10 +1,8 @@
 """Word-level sign recognition using DTW and single-frame classification.
 
-Routes different word types through appropriate recognition pipelines:
-- Motion-based words (hello, thank_you, sorry, yes, please, good, help)
-  use DTW sequence matching against recorded templates.
-- Static words (love, i_love_you, stop) use single-frame XGBoost-style
-  classification on a dedicated word classifier model.
+Routes configured word types through appropriate recognition pipelines. The
+current vocabulary uses single-frame XGBoost-style classification for all
+configured words.
 
 This module is intentionally independent from sign_detector.py to avoid
 disrupting the existing letter recognition pipeline.

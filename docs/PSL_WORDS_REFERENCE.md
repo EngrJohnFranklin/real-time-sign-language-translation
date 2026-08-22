@@ -26,7 +26,7 @@ until every row has been completed from an authoritative PSL source.
 | Sorry | Closed fist placed on chest | Circular motion on the chest | Same as above — unverified |
 | Yes | Fist with extended thumb/fingers, or hand in a fist shape | Up-down motion (like nodding) | Same as above — unverified |
 | Stop | Open flat palm held up, facing outward | Held static, no movement (or firm single downward chop) | Same as above — unverified |
-| Please | Open flat hand placed on chest | Circular motion on the chest | Same as above — unverified |
+| Me | New sign to be recorded | New handshape/motion to be documented | To be filled after recording |
 | Good | Flat hand starting near chin | Moves outward/downward away from mouth | Same as above — unverified |
 | Love | Both arms crossed over chest, fists or flat hands | Held static, no movement | Same as above — unverified |
 | Help | One flat hand under the other closed fist | Moves forward and back together | Same as above — unverified |

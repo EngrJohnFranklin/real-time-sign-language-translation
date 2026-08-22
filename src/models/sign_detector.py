@@ -25,6 +25,8 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+DEBUG_LIVE_INFERENCE = False
+
 try:
     from models.xgboost_classifier import XGBoostSignClassifier
 except ImportError:
@@ -425,6 +427,20 @@ class SignRecognizer:
                     right_landmarks = landmark_list
                 else:
                     left_landmarks = landmark_list
+
+            if DEBUG_LIVE_INFERENCE:
+                handedness_labels = [
+                    handedness.classification[0].label
+                    for handedness in results.multi_handedness
+                ]
+                logger.info(
+                    "Live frame: hands=%d handedness=%s left_zero_padded=%s "
+                    "right_zero_padded=%s",
+                    len(results.multi_hand_landmarks),
+                    handedness_labels,
+                    left_landmarks is None,
+                    right_landmarks is None,
+                )
             
             left_result = None
             right_result = None
@@ -753,36 +769,6 @@ class SignRecognizer:
             return all_curled and at_chest
         except Exception as e:
             logger.error(f"Error in _is_sorry: {e}")
-            return False
-    
-    def _is_please(self, landmarks: List[Tuple[float, float, float]]) -> bool:
-        """
-        Recognize 'Please' sign (open hand, palm facing up, hand moving upward).
-        
-        Args:
-            landmarks: Hand landmarks
-            
-        Returns:
-            True if Please sign is detected
-        """
-        try:
-            fingers = self.analyzer.analyze_finger_configuration(landmarks)
-            position = self.analyzer.get_hand_position(landmarks)
-            
-            # Please: All fingers extended (open palm), hand moving upward
-            all_extended = all([
-                fingers.get('thumb_extended', False),
-                fingers.get('index_extended', False),
-                fingers.get('middle_extended', False),
-                fingers.get('ring_extended', False),
-                fingers.get('pinky_extended', False)
-            ])
-            
-            hand_moving_up = position.get('hand_direction') == 'up'
-            
-            return all_extended and hand_moving_up
-        except Exception as e:
-            logger.error(f"Error in _is_please: {e}")
             return False
     
     def _is_goodbye(self, landmarks: List[Tuple[float, float, float]]) -> bool:

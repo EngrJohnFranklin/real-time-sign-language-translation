@@ -33,7 +33,6 @@ class VideoSign(Enum):
     HELP = "help.mp4"
     GOOD_MORNING = "goodmorning.mp4"
     SORRY = "sorry.mp4"
-    PLEASE = "please.mp4"
     GOODBYE = "goodbye.mp4"
     I_LOVE_YOU = "iloveyou.mp4"
 

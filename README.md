@@ -157,7 +157,6 @@ Place your `.mp4` video files in this directory with these filenames:
 - `help.mp4`
 - `goodmorning.mp4`
 - `sorry.mp4`
-- `please.mp4`
 - `goodbye.mp4`
 - `iloveyou.mp4`
 

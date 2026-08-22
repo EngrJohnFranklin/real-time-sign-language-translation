@@ -6,7 +6,7 @@ single-frame samples. Each recording is a rolling sequence of MediaPipe normaliz
 landmarks saved as (T, 126) NumPy arrays.
 
 Supports 10 word classes:
-- Motion-based: hello, thank_you, sorry, yes, please, good, help
+- Static: love, i_love_you, thank_you, quiet, no, hello, sorry, yes, me, good
 - Static: love, i_love_you, stop
 
 Quality validation:
@@ -51,20 +51,16 @@ _PROJECT_ROOT = _SCRIPT_DIR.parent
 # Add src to path
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 
+from translation.word_template_loader import (  # noqa: E402
+    MOTION_BASED_WORDS,
+    STATIC_WORDS,
+    WORD_CLASSES,
+)
 from utils.landmark_normalizer import normalize_dual_hand_features  # noqa: E402
 from utils.camera_selector import select_camera_index  # noqa: E402
 
 # --- Configuration ---
-WORDS = [
-    "hello", "thank_you", "sorry", "yes", "stop",
-    "please", "good", "love", "help", "i_love_you"
-]
-
-MOTION_BASED_WORDS = {
-    "hello", "thank_you", "sorry", "yes", "please", "good", "help"
-}
-
-STATIC_WORDS = {"love", "i_love_you", "stop"}
+WORDS = WORD_CLASSES
 
 # Recording parameters
 MIN_HAND_CONFIDENCE = 0.7
@@ -110,6 +106,7 @@ class WordTemplateRecorder:
     ) -> Tuple[Optional[np.ndarray], object]:
         """Extract normalized landmarks and MediaPipe results from a frame."""
         try:
+            frame = cv2.flip(frame, 1)
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             results = self.hands.process(rgb_frame)
             

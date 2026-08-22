@@ -23,13 +23,11 @@ GESTURE_TO_MEANING = {
     "Open Palm": "Good Morning",
     "Thumbs Up": "Yes",
     "Thumbs Down": "No",
-    "Index Finger": "Help",
     "Peace Sign": "Thank You",
     "OK Sign": "Good",
     "I Love You": "I Love You",
     "Hello": "Hello",
     "Goodbye": "Goodbye",
-    "Please": "Please",
     "Unknown": "",
 }
 
@@ -38,11 +36,11 @@ WORD_TO_MEANING = {
     "thank_you": "Thank You",
     "sorry": "Sorry",
     "yes": "Yes",
-    "stop": "Stop",
-    "please": "Please",
+    "quiet": "Quiet",
+    "no": "No",
+    "me": "Me",
     "good": "Good",
     "love": "Love",
-    "help": "Help",
     "i_love_you": "I Love You",
 }
 

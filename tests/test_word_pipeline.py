@@ -54,7 +54,7 @@ def test_word_recognition_waits_three_seconds_then_tries_motion_first(monkeypatc
 
         def recognize_static_from_frame(self, _features):
             self.calls.append("static")
-            return "stop", 0.99
+            return "love", 0.99
 
         def recognize_motion_from_sequence(self, _sequence):
             self.calls.append("motion")
@@ -75,7 +75,7 @@ def test_word_recognition_waits_three_seconds_then_tries_motion_first(monkeypatc
     assert recognizer.calls == []
 
     clock[0] += controller.DETECTION_WINDOW_SECONDS
-    assert controller._advance_word_session(np.zeros(126, dtype=np.float32)) == ("stop", 0.99)
+    assert controller._advance_word_session(np.zeros(126, dtype=np.float32)) == ("love", 0.99)
     assert recognizer.calls == ["motion", "static"]
 
 

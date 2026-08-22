@@ -8,3 +8,4 @@
 {"word": "please", "sample_index": 8, "num_frames": 220, "motion_based": true, "timestamp": "2026-08-21T18:00:32.399741", "camera_index": 1, "notes": ""}
 {"word": "please", "sample_index": 9, "num_frames": 215, "motion_based": true, "timestamp": "2026-08-21T18:00:54.366461", "camera_index": 1, "notes": ""}
 {"word": "please", "sample_index": 10, "num_frames": 235, "motion_based": true, "timestamp": "2026-08-21T18:01:23.614505", "camera_index": 1, "notes": ""}
+{"word": "please", "sample_index": 11, "num_frames": 268, "motion_based": false, "timestamp": "2026-08-22T07:53:57.760739", "camera_index": 1, "notes": ""}
