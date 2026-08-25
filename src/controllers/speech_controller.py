@@ -15,7 +15,6 @@ or CustomTkinter widget construction.
 """
 
 import logging
-from typing import Callable, Optional
 
 from app.app_state import AppState
 from services.speech_service import SpeechService
@@ -92,7 +91,12 @@ class SpeechController:
         logger.info("SpeechController: recognition stopped")
 
     def _handle_speech_result(self, result: SpeechResult) -> None:
-        """Process a speech recognition result on the main thread."""
+        """Process a speech recognition result on the main thread.
+
+        The recognizer (``VoskSpeechRecognizer``) already enforces a strict
+        one-word-then-cooldown cycle upstream, so a final result here is a
+        fully finalized single word — commit it immediately, no debounce.
+        """
         try:
             cleaned = " ".join(result.text.strip().split())
             if not cleaned:
