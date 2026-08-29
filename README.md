@@ -134,7 +134,7 @@ src/
   app/                 Shared, thread-safe application state
   controllers/         Camera, sign, and speech interaction controllers
   models/              MediaPipe, XGBoost, letter, and word recognition
-  services/            Camera, recognition, speech, and video services
+  services/            Camera, recognition, speech, and legacy video services
   translation/         Speech, text-to-speech, and sign mapping logic
   ui/                  CustomTkinter views, panels, and components
   utils/               Paths, camera selection, and landmark normalization

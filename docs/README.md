@@ -1,7 +1,9 @@
-# Real-Time Bidirectional Sign Language Translation System
+# Real-Time Sign Language Translation Documentation
 
 ## Overview
-A desktop application that translates sign language to text and speech in real-time, and converts text back to sign language visualization.
+A local desktop application with two input modes: trained FSL alphabet recognition
+from a webcam, and constrained offline speech recognition that displays a matching
+static sign image.
 
 ## Table of Contents
 - [Setup](SETUP.md)
@@ -12,8 +14,9 @@ A desktop application that translates sign language to text and speech in real-t
 
 ## Features
 - Real-time sign language recognition
-- Bidirectional translation (sign ↔ text)
+- FSL alphabet labels (`A` through `Z`) recognized from the webcam when
+	`data/models/sign_model.pkl` is available
 - Text-to-speech output
-- Offline speech recognition
-- Sign animation playback from recognized speech
-- Accessibility-focused responsive UI layout
+- Offline Vosk speech recognition for the configured closed vocabulary
+- Static sign-image display from `assets/sign_images/` for recognized speech
+- CustomTkinter home, sign-input, and speech-input views

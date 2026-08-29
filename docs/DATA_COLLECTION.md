@@ -1,8 +1,11 @@
-# Enhanced Data Collection Guide
+# FSL Alphabet Data Collection Guide
 
 ## Overview
 
-The upgraded `collect_training_data.py` provides a professional-grade data collection interface for the sign language classifier. It includes real-time quality validation, flexible capture modes, and duplicate prevention.
+`collect_training_data.py` collects normalized landmark samples for the FSL
+alphabet classifier. It imports the current `SignType` labels (`A` through `Z`),
+writes rows to `data/training_data/landmark_data.csv`, and includes validation
+and duplicate prevention.
 
 ## Display Elements
 
@@ -10,7 +13,7 @@ The camera window shows comprehensive information:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Sign: Hello           [1/10] Samples: 5         ◉ SINGLE     │
+│ Sign: A               [1/26] Samples: 5         ◉ SINGLE     │
 │ Left hand (1) | Conf: 0.92 | FPS: 28.3                      │
 │ ⚠ Not fully visible                                          │
 ├─────────────────────────────────────────────────────────────┤
@@ -26,8 +29,8 @@ The camera window shows comprehensive information:
 
 | Element | Meaning |
 |---------|---------|
-| **Sign Name** | Current sign being collected (e.g., "Hello") |
-| **[1/10]** | Current sign (1) out of total (10) |
+| **Sign Name** | Current alphabet label being collected (for example, `A`) |
+| **[1/26]** | Current label out of 26 alphabet labels |
 | **Samples: 5** | Number of samples collected for current sign |
 | **◉ SINGLE** | Single capture mode (saves 1 sample per SPACE) |
 | **● CONTINUOUS** | Continuous mode (saves every frame) |
@@ -66,8 +69,8 @@ The camera window shows comprehensive information:
 
 ```
 1. Start script
-2. Press R to begin continuous capture for "Hello"
-3. Perform "Hello" gesture 20-30 times with variations
+2. Press R to begin continuous capture for `A`
+3. Hold the `A` handshape 20-30 times with variations
 4. Press S to stop
 5. Press N to move to next sign
 6. Repeat 2-4 for each sign
@@ -99,9 +102,9 @@ Saved to `data/training_data/landmark_data.csv`:
 
 ```
 label,left_x0,left_y0,left_z0,...,left_z20,right_x0,right_y0,...,right_z20
-Hello,0.15,0.22,0.01,...,-0.03,0.0,0.0,...,0.0
-Hello,0.16,0.23,0.02,...,-0.02,0.0,0.0,...,0.0
-Thank You,0.25,0.18,0.00,...,0.05,0.0,0.0,...,0.0
+A,0.15,0.22,0.01,...,-0.03,0.0,0.0,...,0.0
+A,0.16,0.23,0.02,...,-0.02,0.0,0.0,...,0.0
+B,0.25,0.18,0.00,...,0.05,0.0,0.0,...,0.0
 ...
 ```
 
@@ -172,7 +175,7 @@ threshold = 0.95  # Range: 0.9-0.99 (higher = stricter)
 $ python scripts/collect_training_data.py
 
 === Enhanced Sign Language Data Collection ===
-Signs: Hello, Thank You, Yes, No, Help, ...
+Signs: A, B, C, ..., Z
 Output: data/training_data/landmark_data.csv
 
 Controls:
@@ -183,12 +186,12 @@ Controls:
   P = Previous sign
   ESC = Exit
 
-Ready to collect: Hello
+Ready to collect: A
 
 [User presses R]
-Starting continuous capture for 'Hello'...
-✓ Hello: sample 1
-✓ Hello: sample 2
+Starting continuous capture for 'A'...
+✓ A: sample 1
+✓ A: sample 2
 ✓ Hello: sample 3
 ...
 ✓ Hello: sample 25
@@ -197,7 +200,7 @@ Starting continuous capture for 'Hello'...
 Stopped capture
 
 [User presses N]
-Next: Thank You
+Next: B
 
 [Repeat for all signs]
 
@@ -209,9 +212,9 @@ Exiting...
 ============================================================
 
 Samples per sign:
-  ✓ Hello               :  25 samples
-  ✓ Thank You           :  20 samples
-  ✓ Yes                 :  22 samples
+  ✓ A                   :  25 samples
+  ✓ B                   :  20 samples
+  ✓ C                   :  22 samples
   ...
 ```
 

@@ -1,6 +1,6 @@
 # Software Architecture Document
 
-## Real-Time Bidirectional Filipino Sign Language Translation System
+## Real-Time Filipino Sign Language Recognition and Speech Input System
 
 ### 1. System Overview
 
@@ -16,18 +16,18 @@ The intended translation directions are:
 2. **Speech to Text:** microphone audio is transcribed locally using Vosk.
 3. **Text to Speech:** recognised sign text is spoken through the local pyttsx3
    engine.
-4. **Text to FSL:** text is resolved to locally stored whole-word or alphabet
-   sign clips for playback.
+4. **Speech to Sign Image:** recognized speech is resolved to a matching local
+   static sign-reference image and displayed in the speech view.
 
 All core processing uses local resources. No cloud service or network API is
 required for normal operation. Vosk models, trained classifiers, word templates,
 and media assets are stored within the project environment.
 
-**Current implementation note:** FSL-to-text, speech-to-text, and text-to-speech
-are wired into `MainWindow`. The text-to-FSL playback capability is implemented
-by `VideoService` and `ui/video_player.py`, but the current GUI constructs
-`VideoService(None)`. Consequently, speech results do not currently produce
-sign-video playback until a `VideoPlayerPanel` is supplied during GUI setup.
+**Current implementation note:** The live FSL path recognizes trained alphabet
+labels, not unrestricted signed sentences. The speech path accepts a constrained
+vocabulary and displays images from `assets/sign_images/`. `VideoService` and
+`ui/video_player.py` remain in the source tree as unused legacy components; the
+current GUI does not create a video player panel.
 
 ### 2. Component Architecture and Data Flow
 
@@ -35,7 +35,7 @@ sign-video playback until a `VideoPlayerPanel` is supplied during GUI setup.
 +--------------------+       +-----------------------------------------+
 | Input Devices      |       | Presentation Layer                      |
 | Webcam             |------>| ui/main_window.py                       |
-| Microphone         |------>| ui/views/, ui/panels/, ui/video_player  |
+| Microphone         |------>| ui/views/, ui/panels/, ui/components/   |
 | GUI controls       |------>| CustomTkinter views and status display  |
 +--------------------+       +------------------+----------------------+
                                                  |
@@ -49,18 +49,15 @@ sign-video playback until a `VideoPlayerPanel` is supplied during GUI setup.
                  +-------------------+                   +--------------------+
                  v                                                            v
 +--------------------------------------+      +--------------------------------------+
-| FSL Recognition Pipeline             |      | Speech and Sign-Video Pipeline       |
+| FSL Letter Recognition Pipeline      |      | Speech and Sign-Image Pipeline       |
 | CameraService: OpenCV capture        |      | SpeechService -> SpeechHandler       |
 | SignRecognizer: MediaPipe landmarks  |      | Vosk: local speech-to-text           |
-| XGBoost/word recognizers             |      | pyttsx3: local text-to-speech        |
-| RecognitionService: temporal filter  |      | VideoService -> local FSL clips*     |
+| XGBoost letter classifier            |      | pyttsx3: local text-to-speech        |
+| RecognitionService: temporal filter  |      | SignImageDisplay -> local PNG assets |
 | SignToTextConverter                  |      +--------------------------------------+
 +---------------------+----------------+                         |
                       |                                          v
                       +------------------------------> Text / spoken output
-
-* The video service is available in source code but has no player panel wired
-  into the current MainWindow configuration.
 
 Local resources: config/, data/, assets/, model/, model-tl/
 ```
@@ -75,9 +72,9 @@ main event loop.
 |---|---|
 | `src/main.py` | Configures logging, checks Python and dependencies, prepares local directories, and launches the GUI. |
 | `src/app/app_state.py` | Holds shared state for camera activity, speech activity, recognition state, and displayed translation. |
-| `src/ui/` | Provides the CustomTkinter main window, home/sign/speech views, camera panel, video player, themes, and widgets. |
+| `src/ui/` | Provides the CustomTkinter main window, home/sign/speech views, camera panel, sign-image display, themes, and widgets. The video player is retained but unused by the current GUI. |
 | `src/controllers/` | Coordinates UI events with services. Camera, speech, and sign controllers keep workflow logic outside UI widgets. |
-| `src/services/` | Wraps camera capture, temporal recognition, speech lifecycle, and video playback behind controller-facing APIs. |
+| `src/services/` | Wraps camera capture, temporal recognition, speech lifecycle, and legacy video playback behind controller-facing APIs. |
 | `src/models/` | Implements gesture detection, model loading, feature inference, XGBoost classification, and word recognition. |
 | `src/translation/` | Implements sign-to-text conversion, speech handling, text-to-speech, language mapping, dynamic-time-warping matching, and word-template loading. |
 | `src/utils/` | Provides local configuration, paths, camera selection, landmark normalisation, validation, constants, and logging helpers. |
@@ -88,7 +85,7 @@ main event loop.
 
 | Runtime library | Purpose |
 |---|---|
-| OpenCV (`opencv-python`) | Acquires webcam frames, processes images, and supports video playback. |
+| OpenCV (`opencv-python`) | Acquires webcam frames and processes image data. |
 | MediaPipe | Extracts hand landmarks from live camera frames. |
 | XGBoost | Classifies trained gesture and word-sign features. |
 | scikit-learn | Supports trained-model artefacts and machine-learning preprocessing utilities. |
@@ -109,7 +106,7 @@ real-time-sign-language-translation/
 |   |-- main.py                  Startup, validation, logging, and GUI launch
 |   |-- app/                     Shared application state
 |   |-- controllers/             Camera, speech, and sign workflow coordination
-|   |-- services/                Camera, recognition, speech, and video facades
+|   |-- services/                Camera, recognition, speech, and legacy video facades
 |   |-- models/                  Sign detection, classifiers, and model loading
 |   |-- translation/             Speech, text, template, and language processing
 |   |-- ui/                      CustomTkinter windows, views, panels, and player
@@ -138,5 +135,5 @@ real-time-sign-language-translation/
 A local deployment requires a supported Python installation, the declared runtime
 dependencies, local Vosk model directories, and project data files. A webcam is
 required for FSL input; a microphone is required for speech input; and speakers
-or headphones are required for text-to-speech output. Sign-video output also
-requires local video clips and wiring a `VideoPlayerPanel` to `VideoService`.
+or headphones are required for text-to-speech output. Speech-to-sign display
+requires matching image files under `assets/sign_images/`.
