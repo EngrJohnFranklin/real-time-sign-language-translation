@@ -92,6 +92,9 @@ def _get_project_root() -> Path:
         Path to project root directory.
     """
     try:
+        if getattr(sys, "frozen", False):
+            return Path(sys._MEIPASS)
+
         # Current file is src/main.py, so parent.parent is project root
         current_file = Path(__file__).resolve()
         
@@ -190,6 +193,10 @@ def _setup_path() -> bool:
         True if successful, False otherwise.
     """
     try:
+        if getattr(sys, "frozen", False):
+            logger.debug("Frozen application: using bundled module paths")
+            return True
+
         project_root = _get_project_root()
         src_dir = project_root / "src"
         

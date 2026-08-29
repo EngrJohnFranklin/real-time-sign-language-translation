@@ -1,5 +1,7 @@
 """Focused tests for closed-set speech phrase routing."""
 
+import pytest
+
 from translation.speech_handler import SpeechResult, VoskSpeechRecognizer
 
 
@@ -33,21 +35,22 @@ def test_multword_phrase_prefix_and_exact_matching():
     assert recognizer._match_phrase("i love you") == ("exact", "i love you")
 
 
-def test_exact_partial_resolves_multword_phrase():
+@pytest.mark.parametrize("word", ["hello", "love", "thank you"])
+def test_exact_partial_vocabulary_match_is_never_finalized(word):
     recognizer = make_recognizer()
     results = []
     recognizer.result_callback = results.append
-    result = SpeechResult("thank you", 0.72, False)
+    result = SpeechResult(word, 0.72, False)
 
     recognizer._handle_recognition_attempt(
-        '{"partial":"thank you"}', result, is_final=False, rms=500
+        f'{{"partial":"{word}"}}', result, is_final=False, rms=500
     )
 
-    assert [(item.text, item.is_final) for item in results] == [("thank you", True)]
-    assert recognizer._cooldown_calls == 1
+    assert [(item.text, item.is_final) for item in results] == [(word, False)]
+    assert recognizer._cooldown_calls == 0
 
 
-def test_out_of_vocabulary_partial_is_rejected_immediately():
+def test_nonexact_partial_is_not_finalized_or_reset():
     recognizer = make_recognizer()
     results = []
     recognizer.result_callback = results.append
@@ -58,6 +61,33 @@ def test_out_of_vocabulary_partial_is_rejected_immediately():
     )
 
     assert results == []
+    assert recognizer._reset_calls == 0
+    assert recognizer._cooldown_calls == 0
+
+
+@pytest.mark.parametrize("word", ["hello", "love", "thank you"])
+def test_exact_final_vocabulary_match_is_finalized(word):
+    recognizer = make_recognizer()
+    results = []
+    recognizer.result_callback = results.append
+    result = SpeechResult(word, 0.72, True)
+
+    recognizer._handle_recognition_attempt(
+        f'{{"text":"{word}"}}', result, is_final=True, rms=500
+    )
+
+    assert [(item.text, item.is_final) for item in results] == [(word, True)]
+    assert recognizer._cooldown_calls == 1
+
+
+def test_nonexact_final_resets_recognizer_without_finalizing():
+    recognizer = make_recognizer()
+    result = SpeechResult("banana", 0.5, True)
+
+    recognizer._handle_recognition_attempt(
+        '{"text":"banana"}', result, is_final=True, rms=500
+    )
+
     assert recognizer._reset_calls == 1
     assert recognizer._cooldown_calls == 0
 

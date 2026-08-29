@@ -442,13 +442,15 @@ class VoskSpeechRecognizer:
         )
 
         if decision == "diverged":
-            self._reset_recognizer()
+            if is_final:
+                self._reset_recognizer()
             return
-        if not result or decision == "prefix":
-            if result and not is_final:
+        if not is_final:
+            if result:
                 self._emit_partial_if_new(result)
             return
-        self._emit_final(phrase, result)
+        if result and decision == "exact":
+            self._emit_final(phrase, result)
 
     def _emit_partial_if_new(self, result: SpeechResult) -> None:
         """Emit partial result only if different from last partial within suppress window."""

@@ -3,7 +3,12 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import (
+    collect_all,
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+)
 
 PROJECT_ROOT = Path(SPECPATH)
 
@@ -30,11 +35,33 @@ _datas.extend(
 _binaries = []
 _hiddenimports = []
 
-for package in ("customtkinter", "mediapipe", "pyaudio", "pyttsx3", "vosk"):
+for package in (
+    "customtkinter",
+    "mediapipe",
+    "pyaudio",
+    "pyttsx3",
+    "vosk",
+):
     package_datas, package_binaries, package_hiddenimports = collect_all(package)
     _datas.extend(package_datas)
     _binaries.extend(package_binaries)
     _hiddenimports.extend(package_hiddenimports)
+
+_datas.extend(collect_data_files("xgboost"))
+_binaries.extend(collect_dynamic_libs("xgboost"))
+_hiddenimports.extend(
+    collect_submodules(
+        "xgboost",
+        filter=lambda name: not name.startswith("xgboost.testing"),
+    )
+)
+_hiddenimports.extend(
+    [
+        "sklearn",
+        "sklearn.preprocessing",
+        "sklearn.preprocessing._label",
+    ]
+)
 
 analysis = Analysis(
     [str(PROJECT_ROOT / "src" / "main.py")],
