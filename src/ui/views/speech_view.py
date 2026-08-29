@@ -101,14 +101,22 @@ class SpeechView(ctk.CTkFrame):
         if self._text_display.winfo_exists():
             self._text_display.configure(text=text)
         if self._sign_image_display.winfo_exists():
+            if text:
+                self._sign_image_display.grid()
             self._sign_image_display.update_word(text)
+
+    def clear_sign_image(self):
+        if self._sign_image_display.winfo_exists():
+            self._sign_image_display.clear()
+            self._sign_image_display.grid_remove()
 
     def update_speech_status(self, status):
         colors = {"Ready": COLOR_SUCCESS, "Listening": "#e0a24a",
-                  "Processing": "#FFD700", "Speaking": COLOR_ACCENT}
+                  "Processing": "#FFD700", "Speaking": COLOR_ACCENT,
+                  "Already recognized": "#FF6B6B"}
         if self._speech_status.winfo_exists():
             self._speech_status.configure(
-                text=status, text_color=colors.get(status, COLOR_SUCCESS))
+                text=status, text_color=colors.get(status, "#e0a24a"))
 
     def set_speak_button_text(self, text):
         self._speak_button.configure(text=text)

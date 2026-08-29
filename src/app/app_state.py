@@ -31,6 +31,7 @@ class AppState:
 
     current_translation: str = ""
     speech_status: str = "Ready"
+    recognition_state: str = "ready"
     camera_running: bool = False
     listening: bool = False
 
@@ -63,12 +64,20 @@ class AppState:
         with self._lock:
             self.listening = listening
 
+    def set_recognition_state(self, state: str) -> None:
+        if state not in {"ready", "result_active"}:
+            logger.warning("Unknown recognition state '%s', defaulting to 'ready'", state)
+            state = "ready"
+        with self._lock:
+            self.recognition_state = state
+
     def snapshot(self) -> dict:
         """Return a consistent copy of all fields for logging/debugging."""
         with self._lock:
             return {
                 "current_translation": self.current_translation,
                 "speech_status": self.speech_status,
+                "recognition_state": self.recognition_state,
                 "camera_running": self.camera_running,
                 "listening": self.listening,
             }

@@ -72,6 +72,41 @@ class SpeechService:
             logger.exception("SpeechService failed to stop listening")
 
     # ------------------------------------------------------------------ #
+    # Cooldown State Monitoring                                           #
+    # ------------------------------------------------------------------ #
+
+    def get_cooldown_remaining(self) -> float:
+        """
+        Get seconds remaining in the current cooldown period.
+        
+        During cooldown, the microphone is intentionally deaf to prevent
+        immediate re-triggering of the same word.
+        
+        Returns:
+            Seconds remaining, or 0.0 if not in cooldown.
+        """
+        try:
+            return self._handler.get_cooldown_remaining()
+        except Exception:
+            logger.exception("SpeechService failed to get cooldown remaining")
+            return 0.0
+    
+    def is_in_cooldown(self) -> bool:
+        """Check if speech recognizer is currently in post-word cooldown."""
+        try:
+            return self._handler.is_in_cooldown()
+        except Exception:
+            logger.exception("SpeechService failed to check cooldown state")
+            return False
+
+    def release_cooldown(self) -> None:
+        """Release the active recognition cycle after its result is cleared."""
+        try:
+            self._handler.release_cooldown()
+        except Exception:
+            logger.exception("SpeechService failed to release cooldown")
+
+    # ------------------------------------------------------------------ #
     # Text-to-Speech                                                       #
     # ------------------------------------------------------------------ #
 

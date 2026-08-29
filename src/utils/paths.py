@@ -6,13 +6,17 @@ them or how deep the calling file lives.
 """
 
 import pathlib
+import sys
 from typing import Optional
 
 _MARKER_FILES = ("pyproject.toml", "setup.py", "requirements.txt")
 
 
 def get_project_root(start: Optional[pathlib.Path] = None) -> pathlib.Path:
-    """Walk upward from start (default: this file) to the dir with a project marker."""
+    """Return the source root or the PyInstaller bundle resource directory."""
+    if getattr(sys, "frozen", False):
+        return pathlib.Path(sys._MEIPASS)
+
     current = (start or pathlib.Path(__file__)).resolve()
     if current.is_file():
         current = current.parent

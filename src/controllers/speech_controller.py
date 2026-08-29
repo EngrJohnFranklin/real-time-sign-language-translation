@@ -15,6 +15,7 @@ or CustomTkinter widget construction.
 """
 
 import logging
+import time
 
 from app.app_state import AppState
 from services.speech_service import SpeechService
@@ -48,6 +49,8 @@ class SpeechController:
         self._video = video_service
         self._state = state
         self._view = view
+        self._last_final_text = ""
+        self._last_final_time = 0.0
 
     # ------------------------------------------------------------------ #
     # Public event handlers (called by the view)                          #
@@ -81,9 +84,27 @@ class SpeechController:
         self._speech.start_listening(_on_result)
         logger.info("SpeechController: recognition started")
 
+    def _monitor_cooldown(self) -> None:
+        """Continuously monitor cooldown state and update status."""
+        if not self._state.listening:
+            return
+
+        # Check if still in cooldown
+        remaining = self._speech.get_cooldown_remaining()
+        if remaining > 0.0:
+            status_text = f"Please wait… ({remaining:.1f}s)"
+            self._view.update_speech_status(status_text)
+            # Check again after 200ms
+            self._view.after(200, self._monitor_cooldown)
+        else:
+            # Cooldown is over, back to listening
+            if self._state.listening:
+                self._view.update_speech_status("Listening")
+
     def _stop_listening(self) -> None:
         self._speech.stop_listening()
         self._state.set_listening(False)
+        self._state.set_recognition_state("ready")
         self._state.set_speech_status("Ready")
         self._view.update_speech_status("Ready")
         self._view.set_speak_button_text("🎤 Speak")
@@ -103,17 +124,47 @@ class SpeechController:
                 return
 
             if result.is_final:
+                if self._state.snapshot()["recognition_state"] == "result_active":
+                    return
+
+                # Check for duplicate recognition
+                now = time.time()
+                if (
+                    cleaned.lower() == self._last_final_text.lower()
+                    and (now - self._last_final_time) < 2.0
+                ):
+                    # Same word within 2 seconds — likely the word is still being
+                    # processed for video playback, show feedback to user
+                    self._view.update_speech_status("Already recognized")
+                    self._view.after(1000, lambda: self._view.update_speech_status("Processing"))
+                    return
+
+                self._last_final_text = cleaned
+                self._last_final_time = now
+                self._state.set_recognition_state("result_active")
                 self._state.set_translation(cleaned)
                 self._view.update_translation(cleaned)
+
                 self._view.update_speech_status("Processing")
                 self._play_as_signs(cleaned)
-                # Return to Ready after animations are queued
-                self._view.after(500, lambda: self._view.update_speech_status("Ready"))
+                self._view.after(3000, self._finish_result_cycle)
             else:
                 self._view.update_speech_status("Listening")
 
         except Exception:
             logger.exception("SpeechController._handle_speech_result error")
+
+    def _finish_result_cycle(self) -> None:
+        """Clear the accepted result and reopen recognition as one transition."""
+        if not self._state.listening:
+            return
+        self._speech.release_cooldown()
+        self._state.set_translation("")
+        self._state.set_recognition_state("ready")
+        self._state.set_speech_status("Ready")
+        self._view.update_translation("")
+        self._view.clear_sign_image()
+        self._view.update_speech_status("Ready")
 
     def _play_as_signs(self, text: str) -> None:
         """Queue sign-language animations for the given text."""

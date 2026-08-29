@@ -48,6 +48,14 @@ class SignImageDisplay(ctk.CTkFrame):
         if phrase_path.exists():
             return phrase_path
 
+        # For multi-word phrases (e.g., "i love you", "thank you"),
+        # do NOT silently fall back to the first word. Return None to signal
+        # to the caller that the full phrase image is missing.
+        # Single words (e.g. "hello") will just not find anything anyway.
+        if " " in (word or "").strip():
+            return None
+
+        # Single word: try individual character fallback only if needed
         for token in (word or "").split():
             token_path = self._image_dir / self._filename_for_word(token)
             if token_path.exists():
@@ -81,9 +89,15 @@ class SignImageDisplay(ctk.CTkFrame):
         image_path = self._find_image_path(word)
         if image_path is None:
             self._show_placeholder()
-            if word:
+            if word and " " in word.strip():
+                # Multi-word phrase with no image file — log clearly
                 logger.warning(
-                    "Image lookup MISS for '%s' in %s",
+                    "No sign image found for phrase '%s' in %s",
+                    word, self._image_dir
+                )
+            elif word:
+                logger.warning(
+                    "Image lookup MISS for word '%s' in %s",
                     word,
                     self._image_dir,
                 )
@@ -114,6 +128,10 @@ class SignImageDisplay(ctk.CTkFrame):
         except (OSError, ValueError) as error:
             self._show_placeholder()
             logger.warning("Could not load sign image %s: %s", image_path, error)
+
+    def clear(self) -> None:
+        """Clear the currently displayed sign image."""
+        self._show_placeholder()
 
     def _apply_image(self, image: ctk.CTkImage) -> None:
         """Configure the label with *image*, degrading gracefully on Tcl errors."""

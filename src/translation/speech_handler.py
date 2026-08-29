@@ -11,7 +11,7 @@ import os
 import logging
 import threading
 import time
-from typing import Optional, Callable, List
+from typing import Optional, Callable, List, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import queue
@@ -19,6 +19,8 @@ import queue
 import vosk
 import pyttsx3
 import pyaudio
+
+from utils.paths import get_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +39,18 @@ class SpeechLanguage(Enum):
 class SpeechResult:
     """Data class to hold speech recognition results."""
     text: str
-    confidence: float
+    confidence: Optional[float]
     is_final: bool
     language: str = "en"
     
     def __str__(self) -> str:
         """String representation of speech result."""
         status = "Final" if self.is_final else "Partial"
-        return f"{status}: '{self.text}' (confidence: {self.confidence:.2f})"
+        confidence = (
+            f"{self.confidence:.2f}"
+            if self.confidence is not None else "unavailable"
+        )
+        return f"{status}: '{self.text}' (confidence: {confidence})"
 
 
 class VoskSpeechRecognizer:
@@ -61,9 +67,23 @@ class VoskSpeechRecognizer:
     # fewer overflow gaps than the previous 4096 (≈ 0.26 s) buffer.
     CHUNK_SIZE = 2048
     CHANNELS = 1
-    # 1 char so short acknowledgments ("I", "a") aren't silently dropped.
+    
+    # Result length thresholds (characters)
     MIN_PARTIAL_CHARS = 1
-    MIN_FINAL_CHARS = 1
+    MIN_FINAL_CHARS = 2  # Increased from 1 to filter single-char noise artifacts
+    
+    # ---- Tunable Thresholds for False-Positive Filtering ----
+    # Reject final results where average word confidence falls below this.
+    # Range: 0.0-1.0 (0.0 = accept anything, 1.0 = require perfect confidence).
+    # Typical values: 0.5-0.8 depending on noise level. Start with 0.7.
+    CONFIDENCE_THRESHOLD = 0.7
+    
+    # Reject audio chunks with RMS energy below this threshold.
+    # RMS = root mean square amplitude. Typical ranges:
+    #   Silence: 0-100, Background noise: 100-300, Normal speech: 300-8000
+    # Recommended: 200-300 to filter quiet noise while accepting normal speech.
+    MIN_RMS_ENERGY = 250
+    
     # Seconds an identical result may be re-emitted after. Prevents the
     # duplicate filter from swallowing a genuinely repeated word.
     DUP_SUPPRESS_SEC = 1.5
@@ -71,14 +91,13 @@ class VoskSpeechRecognizer:
     COOLDOWN_SEC = 3.0
     # Words longer than this are rejected mid-utterance so the recognizer
     # resets quickly and stays in strict one-word-at-a-time mode.
-    MAX_WORD_PARTS = 1
     # Closed vocabulary: restrict recognition to the trained sign words so
     # out-of-vocabulary speech ("who", "oh", "haha", …) is rejected/mapped to
     # "[unk]" instead of being confidently misrecognized. Mirrors the folders
     # under data/word_templates and the .png files in assets/sign_images.
     GRAMMAR_WORDS = [
-        "hello", "thank", "you", "sorry", "quiet", "love", "me", "yes",
-        "good", "no", "i", "please", "[unk]",
+        "hello", "thank you", "sorry", "quiet", "love", "me", "yes",
+        "good", "no", "i love you", "please", "[unk]",
     ]
     # Canonical phrases we accept after recognition (grammar emits sub-word
     # tokens, e.g. "i love you"); used by the defensive whitelist filter.
@@ -114,6 +133,7 @@ class VoskSpeechRecognizer:
         self._last_final_time = 0.0
         self._overflow_count = 0
         self._cooldown_until = 0.0  # monotonic time until which audio is ignored
+        self._cooldown_discard_count = 0
         
         try:
             self._initialize_model()
@@ -162,6 +182,7 @@ class VoskSpeechRecognizer:
             self.recognizer = vosk.KaldiRecognizer(
                 self.model, self.SAMPLE_RATE, grammar_json
             )
+            self.recognizer.SetWords(True)
             logger.info(
                 "Vosk recognizer constrained to grammar: %s", grammar_json
             )
@@ -181,26 +202,27 @@ class VoskSpeechRecognizer:
         Returns:
             Ordered candidate model directories.
         """
+        resource_root = get_project_root()
         english_candidates = [
-            "model-en-us",
-            "model-en",
-            "model",
-            "models/vosk/model-en-us",
-            "models/vosk/model"
+            resource_root / "model-en-us",
+            resource_root / "model-en",
+            resource_root / "model",
+            resource_root / "models" / "vosk" / "model-en-us",
+            resource_root / "models" / "vosk" / "model",
         ]
 
         filipino_candidates = [
-            "model-fil",
-            "model-tl",
-            "model-ph",
-            "models/vosk/model-fil",
-            "models/vosk/model-tl"
+            resource_root / "model-fil",
+            resource_root / "model-tl",
+            resource_root / "model-ph",
+            resource_root / "models" / "vosk" / "model-fil",
+            resource_root / "models" / "vosk" / "model-tl",
         ]
 
         if language == SpeechLanguage.FILIPINO:
-            return filipino_candidates
+            return [str(candidate) for candidate in filipino_candidates]
 
-        return english_candidates
+        return [str(candidate) for candidate in english_candidates]
 
     @classmethod
     def is_model_available(
@@ -334,6 +356,7 @@ class VoskSpeechRecognizer:
                         self.audio_stream.read(self.CHUNK_SIZE, exception_on_overflow=False)
                     except Exception:
                         pass
+                    self._cooldown_discard_count += 1
                     continue  # discard chunk — nothing is queued or buffered
 
                 # Cooldown just ended -> announce resumption once.
@@ -371,65 +394,22 @@ class VoskSpeechRecognizer:
                     except Exception:
                         rms = -1
                     
-                    # Process audio chunk with Vosk
+                    # Process audio chunk with Vosk (pass all chunks for continuous stream).
+                    # Vosk's endpoint detection requires the complete audio stream.
                     if self.recognizer.AcceptWaveform(data):
                         # Final result
                         result_json = self.recognizer.Result()
                         result = self._parse_recognition_result(result_json, is_final=True)
-                        
-                        if result:
-                            word = self._filter_to_vocabulary(result.text)
-                            if word is None:
-                                # Out-of-vocabulary / "[unk]" — discard and keep
-                                # listening; do NOT trigger cooldown or lookup.
-                                logger.info(
-                                    "rejected out-of-vocabulary result: '%s'",
-                                    result.text,
-                                )
-                                self._reset_recognizer()
-                                continue
-                            logger.info(
-                                "word recognized: '%s' (conf=%.2f, RMS=%d)",
-                                word, result.confidence, rms,
-                            )
-                            if self.result_callback:
-                                self.result_callback(SpeechResult(
-                                    text=word,
-                                    confidence=result.confidence,
-                                    is_final=True,
-                                    language=result.language,
-                                ))
-                            # Reset recognizer and enter the 3s cooldown.
-                            self._start_cooldown()
+                        self._handle_recognition_attempt(
+                            result_json, result, is_final=True, rms=rms
+                        )
                     else:
-                        # Partial result — keep strictly one word at a time.
+                        # Partial result — keep only prefixes of known phrases.
                         partial_json = self.recognizer.PartialResult()
-                        partial_text = json.loads(partial_json).get("partial", "").strip()
-                        
-                        if len(partial_text.split()) > self.MAX_WORD_PARTS:
-                            # Speaker ran past one word — reset so the next
-                            # utterance is recognized cleanly as a single word.
-                            logger.debug(
-                                "partial '%s' exceeded one word — resetting recognizer",
-                                partial_text,
-                            )
-                            self._reset_recognizer()
-                            continue
-                        
                         result = self._parse_recognition_result(partial_json, is_final=False)
-                        if result:
-                            now = time.monotonic()
-                            is_dup = (
-                                result.text.lower() == self._last_partial_text.lower()
-                                and (now - self._last_partial_time) < self.DUP_SUPPRESS_SEC
-                            )
-                            if is_dup:
-                                continue
-                            self._last_partial_text = result.text
-                            self._last_partial_time = now
-                            logger.debug("partial: '%s'", result.text)
-                            if self.result_callback:
-                                self.result_callback(result)
+                        self._handle_recognition_attempt(
+                            partial_json, result, is_final=False, rms=rms
+                        )
                 
                 except Exception as e:
                     logger.error(f"Error in recognition loop: {e}")
@@ -438,6 +418,61 @@ class VoskSpeechRecognizer:
         except Exception as e:
             logger.error(f"Critical error in recognition loop: {e}")
             self.is_listening = False
+
+    def _handle_recognition_attempt(
+        self, raw_json: str, result: Optional[SpeechResult],
+        is_final: bool, rms: int
+    ) -> None:
+        """Log and route one Vosk result through closed-set phrase matching."""
+        text = result.text if result else ""
+        decision, phrase = self._match_phrase(text)
+        confidence = result.confidence if result else None
+        if decision == "waiting":
+            logger.debug(
+                "speech attempt waiting: raw=%s status=%s rms=%s cooldown_discards=%d",
+                raw_json, "final" if is_final else "partial", rms,
+                self._cooldown_discard_count,
+            )
+            return
+        logger.info(
+            "speech attempt: raw=%s status=%s text=%r decision=%s phrase=%r "
+            "confidence=%s rms=%s cooldown_discards=%d",
+            raw_json, "final" if is_final else "partial", text,
+            decision, phrase, confidence, rms, self._cooldown_discard_count,
+        )
+
+        if decision == "diverged":
+            self._reset_recognizer()
+            return
+        if not result or decision == "prefix":
+            if result and not is_final:
+                self._emit_partial_if_new(result)
+            return
+        self._emit_final(phrase, result)
+
+    def _emit_partial_if_new(self, result: SpeechResult) -> None:
+        """Emit partial result only if different from last partial within suppress window."""
+        now = time.monotonic()
+        if (
+            result.text.lower() == self._last_partial_text.lower()
+            and (now - self._last_partial_time) < self.DUP_SUPPRESS_SEC
+        ):
+            return
+        self._last_partial_text = result.text
+        self._last_partial_time = now
+        if self.result_callback:
+            self.result_callback(result)
+
+    def _emit_final(self, phrase: str, result: SpeechResult) -> None:
+        logger.info("word recognized: %r (conf=%s)", phrase, result.confidence)
+        if self.result_callback:
+            self.result_callback(SpeechResult(
+                text=phrase,
+                confidence=result.confidence,
+                is_final=True,
+                language=result.language,
+            ))
+        self._start_cooldown()
 
     def _reset_recognizer(self) -> None:
         """Drop any in-progress utterance so the next word is recognized cleanly."""
@@ -454,24 +489,25 @@ class VoskSpeechRecognizer:
         self._cooldown_until = time.monotonic() + self.COOLDOWN_SEC
         logger.info("cooldown started (%.1fs) — not listening", self.COOLDOWN_SEC)
 
-    def _filter_to_vocabulary(self, text: str) -> Optional[str]:
-        """Map a recognized utterance to a canonical trained phrase.
+    def release_cooldown(self) -> None:
+        """Release the current recognition cycle after the result is cleared."""
+        self._cooldown_until = 0.0
 
-        Returns the matching phrase from ``ACCEPTED_PHRASES`` (e.g. grammar
-        output "i love you" -> "i love you"), or ``None`` when the text is
-        out-of-vocabulary / "[unk]" and should be discarded.
-        """
+    def _match_phrase(self, text: str) -> Tuple[str, Optional[str]]:
+        """Classify text as waiting, exact, valid prefix, or divergence."""
         normalized = " ".join((text or "").strip().lower().split())
-        if not normalized or normalized == "[unk]":
-            return None
+        if not normalized:
+            return "waiting", None
+        if normalized == "[unk]":
+            return "diverged", None
         if normalized in self.ACCEPTED_PHRASES:
-            return normalized
-        # Grammar may emit extra tokens around the phrase — accept the first
-        # canonical phrase contained in the utterance (longest match first).
-        for phrase in sorted(self.ACCEPTED_PHRASES, key=len, reverse=True):
-            if phrase in normalized:
-                return phrase
-        return None
+            return "exact", normalized
+        if any(
+            phrase.startswith(normalized + " ")
+            for phrase in self.ACCEPTED_PHRASES
+        ):
+            return "prefix", None
+        return "diverged", None
     
     def _parse_recognition_result(self, result_json: str, is_final: bool) -> Optional[SpeechResult]:
         """
@@ -496,18 +532,29 @@ class VoskSpeechRecognizer:
             if is_final and 'text' in result_dict:
                 text = result_dict.get('text', '')
                 word_items = result_dict.get('result', []) or []
-                confidence_values = [item.get('conf', 1.0) for item in word_items if isinstance(item.get('conf', 1.0), (int, float))]
-                confidence = sum(confidence_values) / len(confidence_values) if confidence_values else 1.0
+                confidence_values = [item.get('conf') for item in word_items if isinstance(item.get('conf'), (int, float))]
+                confidence = sum(confidence_values) / len(confidence_values) if confidence_values else None
+                
+                # Reject final result if confidence is below threshold.
+                # This filters out uncertain/misheard words caused by background noise.
+                if confidence is not None and confidence < self.CONFIDENCE_THRESHOLD:
+                    logger.debug(
+                        "Rejected low-confidence result: text=%r conf=%.3f < threshold %.3f",
+                        text,
+                        confidence,
+                        self.CONFIDENCE_THRESHOLD,
+                    )
+                    return None
             
             # Handle partial result format
             elif 'partial' in result_dict:
                 text = result_dict['partial']
-                confidence = 0.5  # Partial results have lower confidence
+                confidence = None
             
             # Handle fallback result text key
             elif 'text' in result_dict:
                 text = result_dict.get('text', '')
-                confidence = 1.0
+                confidence = None
             
             else:
                 return None
@@ -519,6 +566,12 @@ class VoskSpeechRecognizer:
             # Ignore silence/noise-like ultra-short outputs.
             min_chars = self.MIN_FINAL_CHARS if is_final else self.MIN_PARTIAL_CHARS
             if len(text) < min_chars:
+                logger.debug(
+                    "Rejected short result: text=%r len=%d < min_chars=%d",
+                    text,
+                    len(text),
+                    min_chars,
+                )
                 return None
             
             return SpeechResult(
@@ -534,6 +587,20 @@ class VoskSpeechRecognizer:
         except Exception as e:
             logger.error(f"Error parsing recognition result: {e}")
             return None
+    
+    def is_in_cooldown(self) -> bool:
+        """
+        Check if currently in post-word cooldown (microphone is deaf).
+        
+        Returns:
+            True if in cooldown, False if ready to listen.
+        """
+        return time.monotonic() < self._cooldown_until
+    
+    def get_cooldown_remaining(self) -> float:
+        """Get seconds remaining in cooldown, or 0.0 if not in cooldown."""
+        remaining = self._cooldown_until - time.monotonic()
+        return max(0.0, remaining)
     
     def get_recognition_text(self, timeout: Optional[float] = None) -> Optional[str]:
         """
@@ -916,6 +983,27 @@ class SpeechHandler:
         except Exception:
             logger.exception("Error in async speech")
             raise
+    
+    def is_in_cooldown(self) -> bool:
+        """
+        Check if speech recognizer is currently in post-word cooldown.
+        
+        During cooldown, the microphone is intentionally deaf to prevent
+        immediate re-triggering of the same word.
+        
+        Returns:
+            True if in cooldown, False if ready to listen.
+        """
+        return self.recognizer.is_in_cooldown()
+    
+    def get_cooldown_remaining(self) -> float:
+        """
+        Get seconds remaining in the current cooldown period.
+        
+        Returns:
+            Seconds remaining, or 0.0 if not in cooldown.
+        """
+        return self.recognizer.get_cooldown_remaining()
     
     def cleanup(self):
         """Clean up all speech resources."""

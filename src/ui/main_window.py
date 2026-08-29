@@ -286,6 +286,14 @@ class MainWindow(ctk.CTk):
         except Exception:
             logger.exception("update_translation error")
 
+    def clear_sign_image(self) -> None:
+        try:
+            view = self._active_view
+            if view and hasattr(view, "clear_sign_image"):
+                view.clear_sign_image()
+        except Exception:
+            logger.exception("clear_sign_image error")
+
     def update_speech_status(self, status: str) -> None:
         try:
             view = self._active_view
