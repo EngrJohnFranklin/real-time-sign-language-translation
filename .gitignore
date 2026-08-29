@@ -42,3 +42,6 @@ htmlcov/
 build/
 dist/
 *.egg-info/
+
+# Large speech recognition model files
+model-tl/
