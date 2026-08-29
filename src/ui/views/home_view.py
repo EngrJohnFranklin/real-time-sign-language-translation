@@ -5,194 +5,260 @@ import tkinter as tk
 import customtkinter as ctk
 
 from ui.theme import (
-    COLOR_ACCENT, COLOR_BG, COLOR_BORDER, COLOR_CARD, COLOR_CARD_ALT,
-    COLOR_HEADER_END, COLOR_HEADER_START, COLOR_PATTERN, COLOR_PATTERN_BRIGHT,
-    COLOR_PRIMARY, COLOR_PRIMARY_HOVER, COLOR_TEXT_PRIMARY, COLOR_TEXT_SECONDARY,
-    FONT_BODY, FONT_BUTTON, FONT_DISPLAY, FONT_HEADER, CORNER,
+    COLOR_ACCENT,
+    COLOR_BG,
+    COLOR_BORDER,
+    COLOR_CARD,
+    COLOR_CARD_ALT,
+    COLOR_PRIMARY,
+    COLOR_PRIMARY_HOVER,
+    COLOR_TEXT_PRIMARY,
+    COLOR_TEXT_SECONDARY,
+    FONT_BODY,
+    FONT_BUTTON,
+    FONT_HEADER,
+    FONT_SECTION,
 )
 
 
 class HomeView(ctk.CTkFrame):
+    """Clean, modern mode selection screen for the translation application."""
+
     def __init__(self, parent, on_sign_selected, on_speech_selected, **kwargs):
         super().__init__(parent, fg_color=COLOR_BG, **kwargs)
+        self._on_sign_selected = on_sign_selected
+        self._on_speech_selected = on_speech_selected
+
         self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
+
         self._build_header()
-        self._build_content(on_sign_selected, on_speech_selected)
+        self._build_content()
 
     def _build_header(self):
-        header = tk.Canvas(self, height=74, bg=COLOR_HEADER_START,
-                           highlightthickness=0)
-        header.grid(row=0, column=0, sticky="ew")
-        header.bind("<Configure>", lambda event: self._draw_header(header))
-        self._draw_header(header)
+        """Minimal top app bar with subtle branding."""
+        header = ctk.CTkFrame(self, fg_color=COLOR_BG, height=52)
+        header.grid(row=0, column=0, sticky="ew", padx=28, pady=(16, 0))
+        header.grid_columnconfigure(0, weight=1)
 
-    def _draw_header(self, canvas):
-        canvas.delete("all")
-        width = max(canvas.winfo_width(), 1)
-        for x in range(width):
-            ratio = x / width
-            color = self._blend(COLOR_HEADER_START, COLOR_HEADER_END, ratio)
-            canvas.create_line(x, 0, x, 74, fill=color)
-        self._draw_hand(canvas, 28, 20, 0.28, COLOR_ACCENT)
-        self._draw_microphone(canvas, 57, 19, 0.28, COLOR_ACCENT)
-        canvas.create_text(78, 37, anchor="w",
-                           text="Real-Time Sign Language Translation System",
-                           fill=COLOR_TEXT_PRIMARY, font=FONT_HEADER)
+        ctk.CTkLabel(
+            header,
+            text="Real-Time Sign Language Translation System",
+            font=FONT_HEADER,
+            text_color=COLOR_TEXT_PRIMARY,
+            anchor="w",
+        ).grid(row=0, column=0, sticky="w")
 
-    def _build_content(self, on_sign_selected, on_speech_selected):
-        background = tk.Canvas(self, bg=COLOR_BG, highlightthickness=0)
-        background.grid(row=1, column=0, sticky="nsew")
-        background.bind("<Configure>", lambda event: self._draw_circuit_pattern(background))
+    def _build_content(self):
+        """Centered container with clean hero text and two focused mode cards."""
+        center_frame = ctk.CTkFrame(self, fg_color="transparent")
+        center_frame.grid(row=1, column=0, padx=24, pady=24)
+        center_frame.grid_columnconfigure((0, 1), weight=1)
 
-        panel = ctk.CTkFrame(background, fg_color=COLOR_CARD,
-                             border_color=COLOR_BORDER, border_width=1,
-                             corner_radius=CORNER)
-        background.create_window(0, 0, window=panel, anchor="nw", tags="panel")
-        background.bind("<Configure>", lambda event: self._place_panel(background, panel), add="+")
+        # Hero / Section Header
+        hero_frame = ctk.CTkFrame(center_frame, fg_color="transparent")
+        hero_frame.grid(row=0, column=0, columnspan=2, pady=(0, 32))
 
-        panel.grid_columnconfigure((0, 1), weight=1)
-        ctk.CTkLabel(panel, text="Real-Time Sign Language Translation",
-                     font=FONT_DISPLAY, text_color=COLOR_TEXT_PRIMARY).grid(
-                         row=0, column=0, columnspan=2, pady=(28, 4))
-        ctk.CTkLabel(panel, text="Please Select an Input Mode", font=FONT_BODY,
-                     text_color=COLOR_TEXT_SECONDARY).grid(
-                         row=1, column=0, columnspan=2, pady=(0, 22))
+        ctk.CTkLabel(
+            hero_frame,
+            text="TRANSLATION MODES",
+            font=FONT_SECTION,
+            text_color=COLOR_ACCENT,
+        ).pack(pady=(0, 4))
 
-        self._build_mode_card(panel, 0, "Sign Language Input", "hand",
-                              on_sign_selected)
-        self._build_mode_card(panel, 1, "Speak Input", "microphone",
-                              on_speech_selected)
+        ctk.CTkLabel(
+            hero_frame,
+            text="Choose an Input Mode",
+            font=("Arial", 22, "bold"),
+            text_color=COLOR_TEXT_PRIMARY,
+        ).pack(pady=(0, 6))
 
-    def _place_panel(self, background, panel):
-        width = max(background.winfo_width(), 1)
-        height = max(background.winfo_height(), 1)
-        panel_width = min(max(width - 80, 750), 1100)
-        panel_height = min(max(height - 120, 480), 650)
-        background.coords("panel", (width - panel_width) / 2,
-                          (height - panel_height) / 2)
-        panel.configure(width=panel_width, height=panel_height)
+        ctk.CTkLabel(
+            hero_frame,
+            text="Select whether to translate live hand gestures or spoken audio.",
+            font=FONT_BODY,
+            text_color=COLOR_TEXT_SECONDARY,
+        ).pack()
 
-    def _build_mode_card(self, parent, column, label, icon, command):
-        card = ctk.CTkFrame(parent, fg_color=COLOR_CARD_ALT,
-                            border_color=COLOR_BORDER, border_width=1,
-                            corner_radius=CORNER, width=380, height=310)
-        card.grid(row=2, column=column, padx=12, pady=(0, 28), sticky="nsew")
+        # Two mode cards
+        self._sign_button = self._build_card(
+            parent=center_frame,
+            column=0,
+            icon_type="hand",
+            title="Sign Language Input",
+            description="Translate hand gestures from your camera in real time into text and speech output.",
+            button_label="Open Sign Language Input",
+            command=self._on_sign_selected,
+        )
+
+        self._speech_button = self._build_card(
+            parent=center_frame,
+            column=1,
+            icon_type="microphone",
+            title="Speak Input",
+            description="Capture spoken voice from your microphone and display matching sign language and text.",
+            button_label="Open Speak Input",
+            command=self._on_speech_selected,
+        )
+
+    def _build_card(self, parent, column, icon_type, title, description, button_label, command):
+        """Construct a modern rounded card with subtle borders and clear visual hierarchy."""
+        card = ctk.CTkFrame(
+            parent,
+            fg_color=COLOR_CARD,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            corner_radius=14,
+            width=360,
+            height=300,
+        )
+        card.grid(row=1, column=column, padx=16, pady=8, sticky="nsew")
         card.grid_propagate(False)
-        icon_canvas = tk.Canvas(card, width=240, height=165, bg=COLOR_CARD_ALT,
-                                highlightthickness=0)
-        icon_canvas.pack(pady=(25, 0))
-        if icon == "hand":
-            self._draw_hand(icon_canvas, 80, 35, 1.0, COLOR_ACCENT)
+        card.grid_columnconfigure(0, weight=1)
+        card.grid_rowconfigure(2, weight=1)
+
+        # Icon badge container
+        badge = ctk.CTkFrame(
+            card,
+            fg_color=COLOR_CARD_ALT,
+            border_color=COLOR_BORDER,
+            border_width=1,
+            corner_radius=10,
+            width=52,
+            height=52,
+        )
+        badge.pack_propagate(False)
+        badge.grid(row=0, column=0, pady=(26, 12))
+
+        icon_canvas = tk.Canvas(
+            badge,
+            width=32,
+            height=32,
+            bg=COLOR_CARD_ALT,
+            highlightthickness=0,
+        )
+        icon_canvas.pack(expand=True)
+
+        if icon_type == "hand":
+            self._draw_hand_icon(icon_canvas)
         else:
-            self._draw_microphone(icon_canvas, 90, 35, 1.0, COLOR_ACCENT)
-        ctk.CTkLabel(card, text=label, font=FONT_HEADER,
-                     text_color=COLOR_TEXT_PRIMARY).pack(pady=(10, 18))
-        ctk.CTkButton(card, text=label, command=command, font=FONT_BUTTON,
-                      height=46, width=320, corner_radius=8, fg_color=COLOR_PRIMARY,
-                      hover_color=COLOR_PRIMARY_HOVER).pack(padx=30)
+            self._draw_microphone_icon(icon_canvas)
 
-    def _draw_circuit_pattern(self, canvas):
-        canvas.delete("pattern")
-        width, height = canvas.winfo_width(), canvas.winfo_height()
-        for offset in range(-100, width + height, 120):
-            points = [(offset, 0), (offset, 30), (offset + 38, 68),
-                      (offset + 38, height - 55), (offset + 78, height - 15)]
-            canvas.create_line(*[value for point in points for value in point],
-                               fill=COLOR_PATTERN, width=1, tags="pattern")
-            for x, y in (points[1], points[-1]):
-                canvas.create_oval(x - 3, y - 3, x + 3, y + 3,
-                                   outline=COLOR_PATTERN_BRIGHT, width=1,
-                                   tags="pattern")
+        # Card Title
+        ctk.CTkLabel(
+            card,
+            text=title,
+            font=("Arial", 18, "bold"),
+            text_color=COLOR_TEXT_PRIMARY,
+        ).grid(row=1, column=0, pady=(0, 8), padx=20)
 
-    @staticmethod
-    def _blend(start, end, ratio):
-        start_rgb = tuple(int(start[index:index + 2], 16) for index in (1, 3, 5))
-        end_rgb = tuple(int(end[index:index + 2], 16) for index in (1, 3, 5))
-        return "#" + "".join(f"{int(a + (b - a) * ratio):02x}"
-                              for a, b in zip(start_rgb, end_rgb))
+        # Card Description
+        ctk.CTkLabel(
+            card,
+            text=description,
+            font=("Arial", 13),
+            text_color=COLOR_TEXT_SECONDARY,
+            wraplength=290,
+            justify="center",
+        ).grid(row=2, column=0, padx=24, pady=(0, 16), sticky="n")
 
-    @staticmethod
-    def _draw_hand(canvas, x, y, scale, color):
-        points = [(x + 18 * scale, y + 76 * scale),
-                  (x + 12 * scale, y + 70 * scale),
-                  (x + 10 * scale, y + 30 * scale),
-                  (x + 14 * scale, y + 27 * scale),
-                  (x + 19 * scale, y + 31 * scale),
-                  (x + 21 * scale, y + 52 * scale),
-                  (x + 22 * scale, y + 10 * scale),
-                  (x + 27 * scale, y + 7 * scale),
-                  (x + 32 * scale, y + 10 * scale),
-                  (x + 33 * scale, y + 51 * scale),
-                  (x + 35 * scale, y + 28 * scale),
-                  (x + 40 * scale, y + 25 * scale),
-                  (x + 44 * scale, y + 29 * scale),
-                  (x + 43 * scale, y + 52 * scale),
-                  (x + 48 * scale, y + 39 * scale),
-                  (x + 53 * scale, y + 40 * scale),
-                  (x + 54 * scale, y + 46 * scale),
-                  (x + 43 * scale, y + 61 * scale),
-                  (x + 36 * scale, y + 76 * scale)]
-        canvas.create_line(*[value for point in points for value in point],
-                           fill=color, width=max(1, int(3 * scale)),
-                           smooth=True, capstyle=tk.ROUND, joinstyle=tk.ROUND)
+        # Action Button
+        btn = ctk.CTkButton(
+            card,
+            text=button_label,
+            command=command,
+            font=FONT_BUTTON,
+            height=44,
+            width=290,
+            corner_radius=8,
+            fg_color=COLOR_PRIMARY,
+            hover_color=COLOR_PRIMARY_HOVER,
+        )
+        btn.grid(row=3, column=0, padx=24, pady=(0, 24))
+
+        return btn
 
     @staticmethod
-    def _draw_microphone(canvas, x, y, scale, color):
-        width = max(1, int(3 * scale))
-        
-        # Microphone capsule - vertical rounded rectangle (pill shape)
-        cap_left = x + 12 * scale
-        cap_right = x + 36 * scale
-        cap_top = y
-        cap_bottom = y + 50 * scale
-        cap_radius = 12 * scale
-        
-        # Top rounded edge of capsule
-        canvas.create_arc(cap_left, cap_top, cap_right, cap_top + 2 * cap_radius,
-                          start=0, extent=180, outline=color, width=width)
-        # Bottom rounded edge of capsule
-        canvas.create_arc(cap_left, cap_bottom - 2 * cap_radius, cap_right, cap_bottom,
-                          start=180, extent=180, outline=color, width=width)
-        # Left side of capsule
-        canvas.create_line(cap_left, cap_top + cap_radius, cap_left, cap_bottom - cap_radius,
-                           fill=color, width=width)
-        # Right side of capsule
-        canvas.create_line(cap_right, cap_top + cap_radius, cap_right, cap_bottom - cap_radius,
-                           fill=color, width=width)
-        
-        # Stand stem - vertical line from capsule bottom
-        stand_x = x + 24 * scale
-        stand_top = cap_bottom
-        stand_bottom = y + 70 * scale
-        canvas.create_line(stand_x, stand_top, stand_x, stand_bottom,
-                           fill=color, width=width)
-        
-        # Stand base - horizontal line
-        base_left = x + 16 * scale
-        base_right = x + 32 * scale
-        canvas.create_line(base_left, stand_bottom, base_right, stand_bottom,
-                           fill=color, width=width)
-        
-        # Sound waves positioned at capsule vertical middle
-        mid_y = y + 25 * scale
-        
-        # Left side sound waves (parenthesis-like arcs)
-        # Inner arc
-        canvas.create_arc(cap_left - 12 * scale, mid_y - 8 * scale,
-                          cap_left, mid_y + 8 * scale,
-                          start=90, extent=180, outline=color, width=width)
-        # Outer arc
-        canvas.create_arc(cap_left - 20 * scale, mid_y - 12 * scale,
-                          cap_left, mid_y + 12 * scale,
-                          start=90, extent=180, outline=color, width=width)
-        
-        # Right side sound waves (mirrored parenthesis-like arcs)
-        # Inner arc
-        canvas.create_arc(cap_right, mid_y - 8 * scale,
-                          cap_right + 12 * scale, mid_y + 8 * scale,
-                          start=270, extent=180, outline=color, width=width)
-        # Outer arc
-        canvas.create_arc(cap_right, mid_y - 12 * scale,
-                          cap_right + 20 * scale, mid_y + 12 * scale,
-                          start=270, extent=180, outline=color, width=width)
+    def _draw_hand_icon(canvas):
+        """Draw a compact, modern, high-clarity hand icon."""
+        canvas.delete("all")
+        scale = 0.38
+        ox, oy = 5, 2
+        points = [
+            (ox + 18 * scale, oy + 76 * scale),
+            (ox + 12 * scale, oy + 70 * scale),
+            (ox + 10 * scale, oy + 30 * scale),
+            (ox + 14 * scale, oy + 27 * scale),
+            (ox + 19 * scale, oy + 31 * scale),
+            (ox + 21 * scale, oy + 52 * scale),
+            (ox + 22 * scale, oy + 10 * scale),
+            (ox + 27 * scale, oy + 7 * scale),
+            (ox + 32 * scale, oy + 10 * scale),
+            (ox + 33 * scale, oy + 51 * scale),
+            (ox + 35 * scale, oy + 28 * scale),
+            (ox + 40 * scale, oy + 25 * scale),
+            (ox + 44 * scale, oy + 29 * scale),
+            (ox + 43 * scale, oy + 52 * scale),
+            (ox + 48 * scale, oy + 39 * scale),
+            (ox + 53 * scale, oy + 40 * scale),
+            (ox + 54 * scale, oy + 46 * scale),
+            (ox + 43 * scale, oy + 61 * scale),
+            (ox + 36 * scale, oy + 76 * scale),
+        ]
+        flat_points = [val for pt in points for val in pt]
+        canvas.create_line(
+            *flat_points,
+            fill=COLOR_ACCENT,
+            width=2,
+            smooth=True,
+            capstyle=tk.ROUND,
+            joinstyle=tk.ROUND,
+        )
+
+    @staticmethod
+    def _draw_microphone_icon(canvas):
+        """Draw a compact, modern, high-clarity microphone icon."""
+        canvas.delete("all")
+        color = COLOR_ACCENT
+        width = 2
+
+        cx = 16
+        cap_w = 10
+        cap_top = 4
+        cap_h = 14
+        r = cap_w / 2
+
+        # Top arc
+        canvas.create_arc(
+            cx - r, cap_top, cx + r, cap_top + 2 * r,
+            start=0, extent=180, outline=color, width=width,
+        )
+        # Bottom arc
+        canvas.create_arc(
+            cx - r, cap_top + cap_h - 2 * r, cx + r, cap_top + cap_h,
+            start=180, extent=180, outline=color, width=width,
+        )
+        # Side lines
+        canvas.create_line(
+            cx - r, cap_top + r, cx - r, cap_top + cap_h - r,
+            fill=color, width=width,
+        )
+        canvas.create_line(
+            cx + r, cap_top + r, cx + r, cap_top + cap_h - r,
+            fill=color, width=width,
+        )
+
+        # U-shaped cradle around capsule
+        cradle_margin = 4
+        cradle_top = 10
+        cradle_bottom = cap_top + cap_h + 3
+        canvas.create_arc(
+            cx - r - cradle_margin, cradle_top,
+            cx + r + cradle_margin, cradle_bottom,
+            start=180, extent=180, outline=color, width=width, style=tk.ARC,
+        )
+
+        # Stem & Base
+        canvas.create_line(cx, cradle_bottom - 2, cx, 27, fill=color, width=width)
+        canvas.create_line(cx - 6, 27, cx + 6, 27, fill=color, width=width)

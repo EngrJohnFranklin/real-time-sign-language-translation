@@ -55,7 +55,12 @@ from controllers.camera_controller import CameraController
 from controllers.speech_controller import SpeechController
 from controllers.sign_controller import SignController
 from utils.paths import get_model_path
-from ui.theme import COLOR_STATUS_BG, COLOR_STATUS_LED
+from ui.theme import (
+    COLOR_BG,
+    COLOR_STATUS_BG,
+    COLOR_STATUS_LED,
+    COLOR_TEXT_PRIMARY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,19 +181,19 @@ class MainWindow(ctk.CTk):
 
     def _build_layout(self) -> None:
         """Set up the navigation container and show the Home screen."""
-        self._view_container = ctk.CTkFrame(self, fg_color="gray30")
+        self._view_container = ctk.CTkFrame(self, fg_color=COLOR_BG)
         self._view_container.pack(fill="both", expand=True)
 
         self._status_bar = ctk.CTkFrame(
-            self, fg_color=COLOR_STATUS_BG, corner_radius=8, height=40,
+            self, fg_color=COLOR_STATUS_BG, corner_radius=8, height=36,
         )
-        self._status_bar.pack(fill="x", padx=10, pady=(0, 5))
+        self._status_bar.pack(fill="x", padx=12, pady=(0, 6))
         ctk.CTkLabel(
             self._status_bar, text="●", text_color=COLOR_STATUS_LED,
-            font=("Arial", 16, "bold"), width=26,
+            font=("Arial", 14, "bold"), width=24,
         ).pack(side="left", padx=(10, 0))
         self._status_text = ctk.CTkLabel(
-            self._status_bar, text="Ready", text_color="white",
+            self._status_bar, text="Ready", text_color=COLOR_TEXT_PRIMARY,
             font=("Arial", 12), anchor="w",
         )
         self._status_text.pack(side="left", padx=4, fill="x", expand=True)
