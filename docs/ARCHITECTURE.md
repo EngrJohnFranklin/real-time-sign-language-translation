@@ -31,36 +31,8 @@ current GUI does not create a video player panel.
 
 ### 2. Component Architecture and Data Flow
 
-```text
-+--------------------+       +-----------------------------------------+
-| Input Devices      |       | Presentation Layer                      |
-| Webcam             |------>| ui/main_window.py                       |
-| Microphone         |------>| ui/views/, ui/panels/, ui/components/   |
-| GUI controls       |------>| CustomTkinter views and status display  |
-+--------------------+       +------------------+----------------------+
-                                                 |
-                                                 v
-                         +-----------------------+----------------------+
-                         | Application Control                          |
-                         | CameraController | SpeechController          |
-                         | SignController   | AppState                  |
-                         +-----------+-------------------+--------------+
-                                     |                   |
-                 +-------------------+                   +--------------------+
-                 v                                                            v
-+--------------------------------------+      +--------------------------------------+
-| FSL Letter Recognition Pipeline      |      | Speech and Sign-Image Pipeline       |
-| CameraService: OpenCV capture        |      | SpeechService -> SpeechHandler       |
-| SignRecognizer: MediaPipe landmarks  |      | Vosk: local speech-to-text           |
-| XGBoost letter classifier            |      | pyttsx3: local text-to-speech        |
-| RecognitionService: temporal filter  |      | SignImageDisplay -> local PNG assets |
-| SignToTextConverter                  |      +--------------------------------------+
-+---------------------+----------------+                         |
-                      |                                          v
-                      +------------------------------> Text / spoken output
+<img width="1536" height="1024" alt="systemarchi" src="https://github.com/user-attachments/assets/45690e34-1715-4831-8d80-6a8e5573c900" />
 
-Local resources: config/, data/, assets/, model/, model-tl/
-```
 
 Camera capture and speech recognition run in background threads. Controllers use
 CustomTkinter's `after()` mechanism to marshal user-interface updates to the
